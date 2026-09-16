@@ -1,0 +1,18 @@
+# secrets — never commit (Nomos Logos GitHub SOP)
+.dev.vars
+*.env
+Secrets.env
+**/secrets/**
+**/keys/**
+*.key
+*.pem
+config.local.*
+
+# tooling
+node_modules/
+.wrangler/
+dist/
+*.log
+
+# runtime data
+data/

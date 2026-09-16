@@ -1,0 +1,36 @@
+name = "exhume"
+main = "worker/index.js"
+compatibility_date = "2024-11-01"
+
+# The static client is served from the same Worker/origin.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Plain config. Strings on purpose (the Worker Number()s the caps).
+[vars]
+PROVIDER = "mock"          # mock | workers-ai | groq | google | ollama
+DAILY_CANDLES = "60"       # per player, per day
+GLOBAL_DAILY_TURNS = "5000" # THE global spend ceiling. 5000 * $0.00005 ≈ $0.25/day.
+
+# --- Optional bindings. Uncommented + created, the Worker uses them; left off,
+# --- it falls back to in-memory counters and console logging (fine for local).
+#
+# Per-player / global candle counters (durable):
+# [[kv_namespaces]]
+# binding = "EXHUME_KV"
+# id = "PUT_YOUR_KV_ID_HERE"      # wrangler kv namespace create EXHUME_KV
+#
+# Attempt log for research (queryable):
+# [[d1_databases]]
+# binding = "EXHUME_DB"
+# database_name = "exhume"
+# database_id = "PUT_YOUR_D1_ID_HERE"  # wrangler d1 create exhume, then apply schema.sql
+#
+# Real guard on Cloudflare's free neuron pool (set PROVIDER = "workers-ai"):
+# [ai]
+# binding = "AI"
+
+# SERVER_KEY (secret, not a var) keys the word derivation in production:
+#   wrangler secret put SERVER_KEY
+# Provider API keys for groq/google go in .dev.vars locally and as secrets in prod.

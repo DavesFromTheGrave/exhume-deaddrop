@@ -1,0 +1,12 @@
+# Copy to .dev.vars (gitignored) and fill in only what you use.
+# .dev.vars is loaded by `wrangler dev`. NEVER commit the real file.
+
+# Keys the word derivation. Any long random string. Leave unset locally to use
+# the built-in dev fallback; ALWAYS set a real one in production.
+# SERVER_KEY="change-me-to-a-long-random-string"
+
+# Only needed if PROVIDER is set to one of these in wrangler.toml:
+# GROQ_API_KEY="gsk_..."
+# GOOGLE_API_KEY="AIza..."
+# OLLAMA_URL="http://127.0.0.1:11434"
+# OLLAMA_MODEL="llama3.1:8b"

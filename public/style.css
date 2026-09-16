@@ -1,0 +1,140 @@
+/* From the Grave — real jade, real gold. Jade surfaces are the actual marble slab
+   (assets/jade.png) under a dark scrim so text stays legible; gold is a metallic
+   foil gradient. Revenant Systems undead brand. */
+:root{
+  --bg:#060d09; --ink:#ece9d8; --ink-2:#a3b7a8; --ink-3:#66786c; --bone:#f2ecd6;
+  --gold:#c8a24a; --gold-2:#f0dd9c; --gold-deep:#8a6a26;
+  --jade:#3f9068; --jade-2:#78d3a3;
+  --rule:rgba(203,169,92,.34); --rule-strong:rgba(203,169,92,.7);
+  /* real materials */
+  --marble:url("assets/jade.png");
+  --gold-foil2:linear-gradient(152deg,#fff4cc 0%,#e9cf7c 20%,#c69a3f 42%,#8a6a26 54%,#caa14c 68%,#f0dd9c 84%,#b98f36 100%);
+  /* scrims over the marble at different strengths */
+  --panel-scrim:linear-gradient(160deg,rgba(9,22,15,.80),rgba(5,13,9,.90));
+  --sunk-scrim:linear-gradient(160deg,rgba(4,10,7,.90),rgba(3,8,5,.94));
+  --card-scrim:linear-gradient(160deg,rgba(10,26,18,.72),rgba(5,13,9,.86));
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{
+  background:linear-gradient(rgba(4,9,6,.82),rgba(3,7,5,.9)), var(--marble) center/cover fixed, var(--bg);
+  color:var(--ink);
+  font:400 16px/1.55 "Iowan Old Style","Palatino Linotype",Georgia,serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.ui,button,.meter,.chip{font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+#app{max-width:1040px;margin:0 auto;min-height:100%}
+.screen{padding:22px 18px 40px}
+.foot{display:flex;justify-content:space-between;color:var(--ink-3);font-size:12px;
+  letter-spacing:.08em;text-transform:uppercase;margin-top:28px;border-top:1px solid var(--rule);padding-top:12px}
+.allowance{color:var(--ink-3);font-size:12.5px;margin:8px 0 0}
+button{cursor:pointer;border:1px solid var(--rule);background:var(--panel-scrim),var(--marble);background-size:cover;
+  color:var(--ink);border-radius:6px;padding:9px 14px;font-size:14px}
+button:hover{border-color:var(--rule-strong);box-shadow:0 0 0 1px rgba(203,169,92,.3)}
+button.dig{background:var(--gold-foil2);border:1px solid #f3e6b0;color:#1a1206;font-weight:700;
+  text-shadow:0 1px 0 rgba(255,255,255,.35);box-shadow:0 2px 10px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.5)}
+button.dig:hover{filter:brightness(1.07);box-shadow:0 0 16px rgba(230,200,110,.45),inset 0 1px 0 rgba(255,255,255,.6)}
+button.ghost{background:transparent;border-color:var(--rule);color:var(--ink-2)}
+
+/* gold text helper */
+.gold{background:var(--gold-foil2);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ---- level select ---- */
+.crypt-head{text-align:center;padding:10px 0 18px}
+.masthead{width:min(500px,92vw);height:auto;margin:0 auto -6px;display:block;
+  filter:drop-shadow(0 12px 34px rgba(0,0,0,.6))}
+#game-title{font-size:clamp(26px,5vw,46px);letter-spacing:.22em;margin:0;
+  background:var(--gold-foil2);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.tagline{color:var(--jade-2);margin:6px 0 0;font-style:italic}
+.level-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:14px}
+.level-card{position:relative;border:1px solid var(--rule);border-radius:9px;
+  background:var(--card-scrim),var(--marble);background-size:cover;background-position:center;
+  padding:15px 16px 16px;text-align:left;min-height:118px;display:flex;flex-direction:column;gap:6px;transition:.14s;
+  box-shadow:inset 0 0 30px rgba(0,0,0,.35)}
+.level-card:not(.locked):hover{border-color:var(--rule-strong);transform:translateY(-2px);
+  box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 1px rgba(203,169,92,.35)}
+.level-card .num{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.level-card .world{font-size:12px;color:var(--jade-2);letter-spacing:.05em}
+.level-card .lname{font-size:19px;color:var(--bone)}
+.level-card .cfg{margin-top:auto;display:flex;flex-wrap:wrap;gap:5px}
+.level-card.locked{opacity:.5;filter:grayscale(.55);cursor:not-allowed}
+.level-card.done{border-color:var(--jade)}
+.level-card .seal{position:absolute;top:12px;right:13px;font-size:15px}
+.chip{font-size:10.5px;letter-spacing:.04em;border:1px solid var(--rule);border-radius:20px;
+  padding:2px 8px;color:var(--ink-2);background:rgba(4,10,7,.55)}
+.chip.g{border-color:rgba(203,169,92,.5);color:var(--gold-2)}
+.chip.o{border-color:rgba(120,211,163,.45);color:var(--jade-2)}
+.chip.i{border-color:rgba(120,211,163,.6);color:#9ce3c2}
+.chip.m{border-color:rgba(203,169,92,.6);color:var(--gold-2)}
+
+/* ---- play ---- */
+.play-head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:12px}
+.play-title{display:flex;flex-direction:column;line-height:1.1;flex:1}
+.play-title .world{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--jade-2)}
+.play-title .name{font-size:20px;color:var(--bone)}
+.meters{display:flex;gap:14px}
+.meter{font-size:15px;color:var(--ink-2)}
+.meter b{color:var(--gold-2);font-size:17px}
+.play-body{display:grid;grid-template-columns:210px 1fr;gap:16px;margin-top:16px}
+.rack{display:flex;flex-direction:column;gap:9px}
+.rack .layer{border:1px solid var(--rule);border-radius:8px;
+  background:var(--panel-scrim),var(--marble);background-size:cover;padding:10px 12px}
+.rack .layer .lt{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.rack .layer .ld{font-size:13.5px;color:var(--ink);margin-top:3px}
+.rack .layer.fired{border-color:var(--rule-strong);box-shadow:0 0 0 1px rgba(203,169,92,.7) inset,0 0 16px rgba(230,200,110,.3)}
+.rack .layer.pass{border-color:var(--jade)}
+
+.stage{min-width:0;display:flex;flex-direction:column;gap:12px}
+.chat{background:var(--sunk-scrim),var(--marble);background-size:cover;background-position:center;
+  border:1px solid var(--rule);border-radius:10px;padding:14px;
+  min-height:280px;max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;gap:11px;position:relative}
+.chat::before{content:"";position:absolute;inset:0;background:url("assets/sigil.png") no-repeat center 46%;
+  background-size:min(200px,45%);opacity:.38;pointer-events:none}
+.chat > *{position:relative}
+.msg{max-width:86%;padding:9px 13px;border-radius:12px;font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.you{align-self:flex-end;background:rgba(22,39,29,.9);border:1px solid var(--rule);border-bottom-right-radius:3px}
+.msg.guard{align-self:flex-start;background:rgba(9,20,14,.92);border:1px solid var(--rule);border-bottom-left-radius:3px;color:var(--bone)}
+.msg.tape{align-self:center;background:rgba(4,10,7,.85);border:1px dashed var(--rule-strong);color:var(--gold-2);
+  font-family:"Trebuchet MS",sans-serif;font-size:12.5px;letter-spacing:.03em;max-width:96%;text-align:center}
+.msg.sys{align-self:center;color:var(--ink-2);font-size:12.5px;font-style:italic;max-width:96%;text-align:center}
+.msg .tags{display:block;margin-top:5px;font-size:10.5px;color:var(--ink-3);letter-spacing:.04em}
+.thinking{align-self:flex-start;color:var(--jade-2);font-style:italic;font-size:13px}
+
+.turn{display:flex;gap:8px}
+.turn textarea{flex:1;resize:vertical;background:rgba(6,14,10,.9);border:1px solid var(--rule);
+  color:var(--ink);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}
+.turn textarea:focus,.claim input:focus{outline:none;border-color:var(--jade-2)}
+.claim{display:flex;gap:8px}
+.claim input{flex:1;background:rgba(6,14,10,.9);border:1px solid var(--gold-deep);color:var(--gold-2);
+  border-radius:8px;padding:10px 12px;font:inherit;letter-spacing:.06em}
+.claim input::placeholder{color:#9a854f}
+
+/* ---- reveal ---- */
+.reveal{position:fixed;inset:0;background:rgba(3,7,5,.86);display:flex;align-items:center;
+  justify-content:center;padding:18px;z-index:20;backdrop-filter:blur(3px)}
+.reveal-card{position:relative;border:1px solid var(--rule-strong);border-radius:14px;max-width:620px;width:100%;
+  max-height:92vh;overflow:auto;padding:24px 26px 22px;box-shadow:0 24px 80px rgba(0,0,0,.7);
+  background:linear-gradient(160deg,rgba(9,22,15,.90),rgba(5,13,9,.95)),var(--marble);background-size:cover}
+.reveal-card > *{position:relative}
+.reveal-eyebrow{color:var(--gold-2);letter-spacing:.16em;text-transform:uppercase;font-size:11px;margin:0}
+.reveal-card h2{color:var(--bone);margin:6px 0 4px;font-size:26px}
+.reveal-secret{color:var(--ink-2);margin:0 0 14px}
+.reveal-secret b{color:var(--jade-2);font-size:20px;letter-spacing:.08em}
+.reveal-block{border-top:1px solid var(--rule);padding-top:13px;margin-top:13px}
+.reveal-block h3{margin:0 0 5px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-2)}
+.reveal-block p{margin:0;color:var(--ink)}
+.reveal-block a{color:var(--jade-2);font-size:14px;display:inline-block;margin-top:8px}
+.reveal-block pre{white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(4,10,7,.8);border:1px solid var(--rule);
+  border-radius:7px;padding:11px 12px;font-size:12.5px;color:var(--ink-2);margin:8px 0 0}
+.reveal-block summary{cursor:pointer;color:var(--ink-2);font-size:13px}
+.reveal-config{font-size:12px;color:var(--ink-3);margin-top:8px}
+.reveal-actions{display:flex;gap:10px;margin-top:20px}
+
+@media (max-width:720px){
+  .play-body{grid-template-columns:1fr}
+  .rack{flex-direction:row;flex-wrap:wrap}
+  .rack .layer{flex:1;min-width:130px}
+  .chat{max-height:46vh}
+}

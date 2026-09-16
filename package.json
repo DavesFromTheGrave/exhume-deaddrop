@@ -1,0 +1,19 @@
+{
+  "name": "exhume",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Server-side-guarded prompt-injection game. Working title; not confirmed for public use.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node worker/selftest.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.129.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260907.1": true
+  }
+}

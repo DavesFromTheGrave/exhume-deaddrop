@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="From the Grave: 35 crypts, one word to uncover in each. A prompt challenge from Revenant Systems.">
+<title>From the Grave | Revenant Systems</title>
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#game">Skip to the game</a>
+<div class="preview-ribbon">DESIGN PREVIEW <span>Scripted game responses · Progress stays in this browser</span></div>
+<header class="site-head wrap">
+<a class="brand" href="#top" aria-label="Revenant Systems home"><img src="/assets/sigil.png" width="44" height="44" alt=""><span>REVENANT<span class="brand-small">S Y S T E M S</span></span></a>
+<nav aria-label="Main navigation"><a href="#game">The challenge</a><a href="#shop">The armory</a><a href="#recruit">Work with us</a></nav>
+<a class="header-link" href="https://www.revenantsystems.net/contact.html">Contact <span aria-hidden="true">↗</span></a>
+</header>
+<main id="top">
+<section id="game" class="game-section wrap" aria-labelledby="game-title">
+<div id="overview">
+<div class="hero">
+<div class="hero-copy">
+<p class="eyebrow"><span class="status-light"></span> FROM THE GRAVE / A PROMPT CHALLENGE</p>
+<h1 id="game-title">The dead<br>keep <em>one word.</em></h1>
+<p class="hero-deck">The Gravekeeper has it. Your words are the only way in. Break through 35 crypts of escalating defenses and find out how far your thinking takes you.</p>
+<div class="hero-actions"><button id="begin" class="button primary" disabled>Loading the crypts… <span aria-hidden="true">↗</span></button><a class="text-link" href="#how">How to play <span aria-hidden="true">↓</span></a></div>
+<p class="small muted">Free to play. No account needed. No purchase required.</p>
+<div class="hero-metrics"><div><b>35</b><span>CRYPTS TO OPEN</span></div><div><b>06</b><span>WORLDS TO CROSS</span></div><div><b id="cleared">00</b><span>CRYPTS CLEARED</span></div></div>
+</div>
+<div class="map-panel">
+<div class="map-top"><span>THE SEAL / SELECT A CRYPT</span><button id="motion" class="text-button" aria-pressed="false">Pause motion</button></div>
+<div class="seal-map" id="seal-map">
+<svg class="geometry" viewBox="0 0 600 600" aria-hidden="true"><defs><radialGradient id="halo"><stop stop-color="#59bb94" stop-opacity=".12"/><stop offset="1" stop-color="#59bb94" stop-opacity="0"/></radialGradient></defs><circle cx="300" cy="300" r="285" fill="url(#halo)" stroke="none"/><g class="orbit"><circle cx="300" cy="300" r="260"/><circle cx="300" cy="300" r="240" stroke-dasharray="2 12"/><path d="M300 40 525 170 525 430 300 560 75 430 75 170Z M300 40 525 430 75 430Z M300 560 75 170 525 170Z"/><circle cx="300" cy="300" r="150"/><circle cx="300" cy="150" r="150"/><circle cx="430" cy="225" r="150"/><circle cx="430" cy="375" r="150"/><circle cx="300" cy="450" r="150"/><circle cx="170" cy="375" r="150"/><circle cx="170" cy="225" r="150"/></g></svg>
+<img class="map-emblem" src="/assets/sigil.png" alt="" width="128" height="108">
+<div id="level-nodes" aria-label="35 crypts"></div>
+</div>
+<div class="crypt-preview" aria-live="polite"><div><p class="eyebrow" id="selected-world">OPENING THE CRYPTS</p><h2 id="selected-name">The descent awaits.</h2><p id="selected-note" class="small muted">Each seal is a level. Select one to inspect it.</p></div><button id="enter-selected" class="square-button" disabled aria-label="Enter selected crypt">↗</button></div>
+<div class="legend"><span><i class="current"></i>Available</span><span><i class="complete"></i>Cleared</span><span><i></i>Sealed</span></div>
+</div>
+</div>
+<div id="worlds" class="worlds" aria-label="Campaign worlds"></div>
+</div>
+<section id="play" class="play-shell" hidden aria-labelledby="play-title">
+<div class="play-head"><button id="back" class="text-button">← All crypts</button><span id="play-world" class="eyebrow"></span><span class="mode-label">SCRIPTED PREVIEW</span><button id="play-motion" class="text-button" aria-pressed="false">Pause motion</button></div>
+<div class="play-layout">
+<aside class="play-aside"><div id="crypt-seal" class="crypt-seal" data-mood="idle"><svg class="crypt-geometry" viewBox="0 0 240 240" aria-hidden="true"><g class="crypt-orbit"><circle cx="120" cy="120" r="99"/><path d="M120 21 206 169 34 169Z M120 219 34 71 206 71Z"/><circle cx="120" cy="120" r="65"/></g></svg><img src="/assets/sigil.png" width="106" height="90" alt=""><div id="crypt-stars" aria-hidden="true"></div><span id="seal-level" class="seal-level"></span></div><p id="seal-status" class="seal-status" role="status">The seal awaits.</p><p id="play-number" class="eyebrow"></p><h2 id="play-title"></h2><p class="muted">Find the hidden word, then speak it to open the next crypt.</p><div class="turn-meters"><div><b id="candles">0</b><span>Messages left</span></div><div><b id="digs">0</b><span>Words to speak</span></div></div><h3 class="eyebrow">ACTIVE DEFENSES</h3><div id="rack"></div><button id="retry" class="text-button">Restart this crypt</button><p id="allowance" class="small muted"></p></aside>
+<div class="conversation">
+<div id="chat" role="log" aria-live="polite" aria-label="Conversation with the Gravekeeper" tabindex="0"></div>
+<form id="turn-form"><label for="turn-input">Your message to the Gravekeeper</label><div class="compose"><textarea id="turn-input" rows="3" aria-describedby="message-limit" placeholder="Ask your first question…" required></textarea><button class="button primary" id="send" type="submit">Send ↗</button></div></form>
+<p id="message-limit" class="small muted"></p>
+<form id="claim-form"><label for="claim-input">Speak the word</label><div class="claim-row"><input id="claim-input" maxlength="80" autocomplete="off" placeholder="Speak the word of passage…" required><button class="button secondary" id="claim" type="submit">Speak the word</button></div></form>
+</div>
+</div>
+</section>
+<p id="game-status" class="game-status" role="status"></p>
+<noscript><p>The challenge needs JavaScript. You can still explore the products below.</p></noscript>
+</section>
+<section id="how" class="how wrap" aria-label="How the challenge works">
+<div><span class="step">01</span><h2>Talk your way in.</h2><p>Every crypt hides a word. Ask questions, test an approach, and study the response.</p></div>
+<div><span class="step">02</span><h2>Open the next seal.</h2><p>Speak the word to progress. New crypts add defenses, filters, and different ways to interact.</p></div>
+<div><span class="step">03</span><h2>Understand the break.</h2><p>Each cleared crypt reveals its defenses and a field guide to the technique it was built to teach.</p></div>
+</section>
+<section class="shop-section" id="shop" aria-labelledby="shop-title">
+<div class="wrap">
+<div class="section-heading"><div><p class="eyebrow">BEYOND THE CHALLENGE / THE ARMORY</p><h2 id="shop-title">Put that curiosity<br><em>to work.</em></h2></div><p>The game tests how you think.<br>Explore tools for AI development, security testing, business workflows, and a workspace that feels like yours.</p></div>
+<div class="featured">
+<article class="wraith-feature"><div class="feature-copy"><p class="eyebrow">FOR THE SECURITY-MINDED</p><h3>Wraith</h3><p>14 skills for security and red-team work. Explore the pack behind the name, see what it includes, and decide whether it fits your workflow.</p><button class="button primary" data-product="wraith">Explore Wraith <span>$24 ↗</span></button></div><img src="/assets/sigil.png" alt="" width="310" height="260" loading="lazy"></article>
+<article class="bundle-feature"><p class="eyebrow">THE COMPLETE COLLECTION</p><h3>Ten packs.<br>One armory.</h3><p>Security, AI engineering, design, sales, analytics, and more. All ten skill packs in one purchase.</p><button class="text-link" data-product="bundle">Explore the bundle <span>$149 ↗</span></button></article>
+</div>
+<div class="catalog-head"><h3>Find your next tool.</h3><p id="catalog-count" class="small muted">17 offerings · 2 free downloads</p></div>
+<div class="filters" role="group" aria-label="Filter products"><button data-filter="all" aria-pressed="true">Everything <span>17</span></button><button data-filter="ai" aria-pressed="false">AI & security</button><button data-filter="work" aria-pressed="false">Build & grow</button><button data-filter="desktop" aria-pressed="false">Your desktop</button><button data-filter="free" aria-pressed="false">Start free</button></div>
+<div class="product-list" id="products"></div>
+<noscript><a href="https://www.revenantsystems.net/software.html">View all software and prices</a></noscript>
+</div>
+</section>
+<section id="recruit" class="recruit wrap" aria-labelledby="recruit-title"><div class="recruit-mark" aria-hidden="true">⟐</div><div><p class="eyebrow">THINK YOU CAN GO FURTHER?</p><h2 id="recruit-title">We’re interested in<br><em>how you found the way in.</em></h2><p>If you’re good at finding where an LLM’s defenses fail, we want to hear how you work. Tell us about an approach you tested, what happened, and how you would reproduce it.</p><a class="button secondary" href="https://www.revenantsystems.net/contact.html">Talk to Revenant Systems <span aria-hidden="true">↗</span></a><p class="small muted">For possible future opportunities. Completing this preview is not a hiring assessment or an offer of employment.</p></div></section>
+<section class="about wrap"><p class="eyebrow">REVENANT SYSTEMS</p><h2>Machine identity.<br>Human agency.</h2><div><p>We build tools for people who want to understand and shape the systems they use. Play the challenge, explore the software, or get to know the thinking behind Revenant Systems.</p><a class="text-link" href="https://www.revenantsystems.net/mission.html">Our mission ↗</a><a class="text-link" href="https://www.revenantsystems.net/resources.html">Resources ↗</a></div></section>
+</main>
+<footer class="wrap"><a class="brand" href="#top">REVENANT SYSTEMS</a><p>From the Grave · Design preview</p><a href="https://www.revenantsystems.net/contact.html">Questions? Get in touch ↗</a></footer>
+<dialog id="reveal" aria-labelledby="reveal-title"><div class="dialog-inner"><p class="eyebrow">THE GROUND GIVES WAY</p><div class="reveal-sigil" aria-hidden="true"><img src="/assets/sigil.png" width="110" height="92" alt=""></div><h2 id="reveal-title"></h2><p class="found-word">You found <b id="reveal-secret"></b></p><h3>The lesson</h3><p id="reveal-lesson"></p><h3 id="reveal-tech-title"></h3><p id="reveal-tech-how"></p><a id="reveal-doc" class="text-link" target="_blank" rel="noopener">Read the field guide ↗</a><details><summary>What the Gravekeeper was told</summary><pre id="reveal-guard"></pre></details><div class="dialog-actions"><button id="next" class="button primary">Next crypt ↗</button><button id="close-reveal" class="button secondary">Back to the map</button></div><div class="after-game"><p>Taking something from the challenge?</p><button id="after-shop" class="text-link">Explore AI & security tools ↗</button><button id="after-recruit" class="text-link">Talk to us about your approach ↗</button></div></div></dialog>
+<dialog id="product-dialog" aria-labelledby="product-title"><div class="dialog-inner"><button id="close-product" class="close-button" aria-label="Close product details">×</button><p id="product-category" class="eyebrow"></p><h2 id="product-title"></h2><p id="product-description"></p><p id="product-detail" class="muted"></p><a id="product-source" class="text-link" href="https://www.revenantsystems.net/software.html" target="_blank" rel="noopener">Read the full product description ↗</a><div class="dialog-actions"><a id="product-buy" class="button primary"></a></div><p class="small muted">Links open the current Revenant Systems checkout or download. Purchases are real.</p></div></dialog>
+</body>
+</html>

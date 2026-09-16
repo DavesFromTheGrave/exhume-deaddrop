@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>From the Grave</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- LEVEL SELECT -->
+  <section id="select" class="screen">
+    <header class="crypt-head">
+      <img class="masthead" src="assets/headstone.png" alt="from the Grave" />
+      <h1 id="game-title">EXHUME</h1>
+      <p class="tagline">The dead keep one word. Take it from them.</p>
+      <p class="allowance" id="select-allowance"></p>
+    </header>
+    <div id="level-grid" class="level-grid"></div>
+    <footer class="foot">
+      <span id="provider-note"></span>
+      <span>Revenant Systems</span>
+    </footer>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play" class="screen" hidden>
+    <header class="play-head">
+      <button id="back" class="ghost" aria-label="Back to levels">‹ crypts</button>
+      <div class="play-title">
+        <span id="play-world" class="world"></span>
+        <span id="play-name" class="name"></span>
+      </div>
+      <div class="meters">
+        <span class="meter" title="Turns left this crypt">🕯 <b id="candles">0</b></span>
+        <span class="meter" title="Chances to speak the word">⛏ <b id="digs">0</b></span>
+      </div>
+    </header>
+
+    <div class="play-body">
+      <aside id="rack" class="rack" aria-label="Active defenses"></aside>
+
+      <main class="stage">
+        <div id="chat" class="chat" aria-live="polite"></div>
+
+        <form id="turn-form" class="turn">
+          <textarea id="turn-input" rows="2" aria-describedby="message-limit" placeholder="Speak to the Gravekeeper…" autocomplete="off"></textarea>
+          <button id="send" type="submit">Send</button>
+        </form>
+
+        <p id="message-limit" class="allowance"></p>
+
+        <form id="claim-form" class="claim">
+          <input id="claim-input" type="text" placeholder="Speak the word of passage…" autocomplete="off" />
+          <button id="claim" type="submit" class="dig">Speak the word</button>
+        </form>
+        <p class="allowance" id="play-allowance"></p>
+      </main>
+    </div>
+  </section>
+
+  <!-- REVEAL -->
+  <div id="reveal" class="reveal" hidden>
+    <div class="reveal-card">
+      <p class="reveal-eyebrow">The ground gives way</p>
+      <h2 id="reveal-title"></h2>
+      <p class="reveal-secret">You exhumed <b id="reveal-secret"></b></p>
+
+      <div class="reveal-block">
+        <h3>The lesson</h3>
+        <p id="reveal-lesson"></p>
+      </div>
+
+      <div class="reveal-block">
+        <h3 id="reveal-tech-title"></h3>
+        <p id="reveal-tech-how"></p>
+        <a id="reveal-doc" href="#" target="_blank" rel="noopener">Read the field guide ›</a>
+      </div>
+
+      <details class="reveal-block">
+        <summary>What the Gravekeeper was told</summary>
+        <pre id="reveal-guard"></pre>
+        <p class="reveal-config" id="reveal-config"></p>
+      </details>
+
+      <details class="reveal-block" id="reveal-win-wrap">
+        <summary>Your winning move</summary>
+        <pre id="reveal-win"></pre>
+      </details>
+
+      <div class="reveal-actions">
+        <button id="reveal-next" class="dig">Next crypt ›</button>
+        <button id="reveal-close" class="ghost">Back to crypts</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
