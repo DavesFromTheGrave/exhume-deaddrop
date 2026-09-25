@@ -98,6 +98,14 @@ confirmed) then found and this branch fixed:
      is earned but not posted. `CLUB_INVITE_URL` as before.
    - `GLOBAL_DAILY_TURNS` is 1000 in wrangler.toml, sized to Groq's free quota
      per third-party summaries; set it from your account's limits page.
+   - Some lessons and hints describe the I3 screen and O4 judge as models ("A
+     second model screens your message", "The judge is a model with the same
+     blind spots", 35-L27 "The screener is real now"). In this engine both are
+     deterministic rules standing in for a model. True of the real-world pattern
+     the level teaches, not of this level. Reword, or build a model-backed
+     screen/judge. (35: L9, L13, L27; 15: L7, L9.)
+   - Workers is not the production host. If it becomes one, per-player limits
+     and caps need a Durable Object (see README, enforcement).
 
 ## Constraints
 

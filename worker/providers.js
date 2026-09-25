@@ -88,9 +88,9 @@ function callMock({ level, secret, playerMessage }) {
 async function callWorkersAI(env, { system, messages }) {
   if (!env.AI) throw new Error("Workers AI binding (env.AI) is not configured");
   const model = env.WORKERS_AI_MODEL || MODELS["workers-ai"];
-  const out = await env.AI.run(model, {
+  const out = await withTimeout(env.AI.run(model, {
     messages: [{ role: "system", content: system }, ...messages], max_tokens: 600, temperature: 0,
-  });
+  }), model);
   // Llama-family models answer in `response`; newer catalog models (glm, gemma,
   // kimi) answer in the chat-completions shape.
   const text = out && (out.response || out.result || out.choices?.[0]?.message?.content);
@@ -124,7 +124,7 @@ async function callGroq(env, req) {
 async function callOpenAICompat(env, { system, messages }, url, key, model) {
   if (!key) throw new Error(`API key missing for ${model}`);
   const r = await fetch(url, {
-    method: "POST",
+    method: "POST", signal: timeoutSignal(),
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model, messages: [{ role: "system", content: system }, ...messages], max_tokens: 600, temperature: 0,
@@ -145,12 +145,25 @@ function providerError(message, status) {
   return e;
 }
 
-// An empty completion is an error, not a reply: the caller refunds the exchange
-// instead of showing the player a blank turn. Reasoning models do this when the
+// An empty completion is an error, not a reply: the player is not shown a blank
+// turn and keeps the exchange. The provider did run (and bill) it, so it is marked
+// `billed` and the cost counters keep it. Reasoning models do this when the
 // reasoning pass eats the whole token budget (finish_reason "length").
 function nonEmpty(text, model, finish) {
   if (String(text).trim()) return text;
-  throw new Error(`${model} returned an empty completion${finish ? ` (finish_reason ${finish})` : ""}`);
+  const e = new Error(`${model} returned an empty completion${finish ? ` (finish_reason ${finish})` : ""}`);
+  e.billed = true;
+  throw e;
+}
+
+// How long one guard call may take. A turn holds the player's lock (lock.js) while
+// it waits, so a stalled provider must not hold it for minutes.
+const PROVIDER_TIMEOUT_MS = 25000;
+const timeoutSignal = () => AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
+function withTimeout(promise, label) {
+  let t;
+  const timer = new Promise((_, reject) => { t = setTimeout(() => reject(new Error(`${label} timed out after ${PROVIDER_TIMEOUT_MS} ms`)), PROVIDER_TIMEOUT_MS); });
+  return Promise.race([promise, timer]).finally(() => clearTimeout(t));
 }
 
 async function callGoogle(env, { system, messages }) {
@@ -176,7 +189,7 @@ async function callGoogle(env, { system, messages }) {
   }
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: "POST", headers: { "content-type": "application/json" },
+    { method: "POST", signal: timeoutSignal(), headers: { "content-type": "application/json" },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig }) }
   );
   if (!r.ok) throw providerError(`google ${model} HTTP ${r.status}: ${await r.text()}`, r.status);
@@ -186,7 +199,7 @@ async function callGoogle(env, { system, messages }) {
 
 async function callOllama(env, { system, messages }) {
   const r = await fetch((env.OLLAMA_URL || "http://127.0.0.1:11434") + "/api/chat", {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", signal: timeoutSignal(), headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: env.OLLAMA_MODEL || MODELS.ollama, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
   });
   if (!r.ok) throw providerError(`ollama HTTP ${r.status}: ${await r.text()}`, r.status);

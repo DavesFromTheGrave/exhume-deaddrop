@@ -193,9 +193,9 @@ async function startLevel(id, { restart = false } = {}) {
     addSys(introFor(data.level));
     if (data.level.note) addSys(data.level.note);
     if (data.status === "resumed") {
-      const turns = data.transcript || [];
-      addSys(turns.length ? "You pick up where you left off." : "You pick up where you left off. Nothing has been said yet.");
-      for (const t of turns) showExchange(t);
+      const used = (data.progress && data.progress.used) || {};
+      addSys(used.exchanges || used.guesses ? "You pick up where you left off." : "You pick up where you left off. Nothing has been said yet.");
+      for (const t of data.transcript || []) showExchange(t);
     }
     setProgress(data.progress);
     setEnabled(true);
@@ -209,8 +209,16 @@ async function startLevel(id, { restart = false } = {}) {
     ti.focus();
     return true;
   } catch (err) {
-    addSys("The gate did not answer. Check your connection and try again.");
-    return false;
+    // Say it where the player is looking. A retry never repeats a restart: the
+    // restart may have gone through, and a plain start resumes whatever is open.
+    if ($("#play").hidden) {
+      $("#select-allowance").textContent = "The gate did not answer. Check your connection and pick the level again.";
+    } else {
+      addSys("The gate did not answer. Check your connection.");
+      state.busy = false;
+      offer("Try again", () => startLevel(id));
+    }
+    return null;   // handled: the caller must not add another offer
   } finally {
     state.busy = false;
   }
@@ -308,6 +316,8 @@ const addSys = (t) => addMsg("sys", t);
 
 // One exchange as the player saw it: their message, then what came back.
 function showExchange(t, tags, withUser = true) {
+  if (t.hint != null) { addMsg("tape", `Hint ${t.index}: ${t.hint}`); return; }
+  if (t.miss != null) { addMsg("tape", `"${t.miss}" is not the word.`); return; }
   if (withUser) addMsg("you", t.user);
   if (t.blocked) {
     addMsg("tape", `${THEME.layers.input.toUpperCase()} ${t.blocked.layer}: ${t.blocked.reason}. Message blocked, exchange spent.`);
@@ -317,13 +327,13 @@ function showExchange(t, tags, withUser = true) {
   if (t.filtered) addMsg("tape", `${THEME.layers.output.toUpperCase()} ${t.filtered.layer}: ${t.filtered.reason}. The leak was cut.`);
 }
 
-// A button in the chat. If what it starts does not go through (offline, say),
-// the button comes back so the player is never left with nothing to press.
+// A button in the chat. startLevel reports its own failures (and offers a plain
+// retry), so a button is only put back when the action was refused outright.
 function offer(label, fn) {
   const b = el("button", "dig offer", label);
   b.addEventListener("click", async () => {
     document.querySelectorAll("#chat .offer").forEach((x) => x.remove());
-    if (!(await fn())) offer(label, fn);
+    if ((await fn()) === false) offer(label, fn);
   });
   $("#chat").appendChild(b);
   $("#chat").scrollTop = $("#chat").scrollHeight;
@@ -354,9 +364,9 @@ $("#turn-form").addEventListener("submit", async (e) => {
     thinking.remove();
     if (data.progress) setProgress(data.progress);
     if (data.allowance) $("#play-allowance").textContent = allowanceText(data.allowance);
-    if (data.closed) { mine.remove(); addSys(data.reason); return; }
+    if (data.closed) { unsent(mine, msg); addSys(data.reason); return; }
     if (!ok || data.error) {
-      mine.remove();   // it was not sent, or not answered; the text stays in the box
+      unsent(mine, msg);
       addSys(data.error || "The message could not be sent.");
       if (data.code === "NO_ATTEMPT") offerRetry();
       if (data.code === "NO_EXCHANGES") offerRestart();
@@ -376,12 +386,24 @@ $("#turn-form").addEventListener("submit", async (e) => {
     if (state.left.exchanges <= 0) addSys("That was your last exchange. Speak the word now, or restart.");
   } catch (err) {
     thinking.remove();
-    mine.remove();
-    addSys("The gate did not answer. Check your connection; nothing was spent.");
+    // The request may or may not have reached the guard. Say so, and let the
+    // player re-enter: a plain start resumes and shows what the server holds.
+    mine.appendChild(el("span", "tags", "no answer came back"));
+    addSys("The gate did not answer. Your message may or may not have reached the guard.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
   } finally {
     state.busy = false;
   }
 });
+
+// A message that was refused before it reached the guard. If the box still holds
+// it, drop the bubble (the text is right there); if the player has typed since,
+// keep the bubble so the text is not lost, and mark it.
+function unsent(bubble, msg) {
+  if ($("#turn-input").value.trim() === msg) bubble.remove();
+  else bubble.appendChild(el("span", "tags", "not sent"));
+}
 
 // ---------- a hint ----------
 
@@ -400,7 +422,9 @@ $("#hint").addEventListener("click", async () => {
     addMsg("tape", `Hint ${data.index}: ${data.hint}`);
     if (state.left.exchanges <= 0) addSys("That hint took your last exchange. Speak the word now, or restart.");
   } catch (err) {
-    addSys("The gate did not answer. Check your connection; nothing was spent.");
+    addSys("The gate did not answer. The hint may or may not have been bought.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
   } finally {
     state.busy = false;
     updateHint();
@@ -428,6 +452,7 @@ $("#claim-form").addEventListener("submit", async (e) => {
       ME.cleared = data.cleared || ME.cleared;
       ME.doors = data.doors || ME.doors;
       ci.value = "";
+      setEnabled(false);   // this attempt is over
       showReveal(data.reveal);
       return;
     }
@@ -444,7 +469,9 @@ $("#claim-form").addEventListener("submit", async (e) => {
       }
     }
   } catch (err) {
-    addSys("The gate did not answer. Check your connection; your guess was not counted.");
+    addSys("The gate did not answer. Your guess may or may not have been counted.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
   } finally {
     state.busy = false;
   }

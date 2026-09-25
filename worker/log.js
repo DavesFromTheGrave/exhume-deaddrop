@@ -33,8 +33,13 @@ export async function logAttempt(env, row) {
       ).bind(rec.ts, rec.player, rec.ladder, ...tail).run();
       return;
     } catch (e) {
-      // A table created before the ladder column: write the old row shape, and
-      // keep the ladder in the console line (schema.sql has the one-line migration).
+      // Only a table created before the ladder column falls back to the old row
+      // shape (schema.sql has the one-line migration). Any other failure, such as
+      // a dropped connection, must not write a row labelled with the wrong ladder.
+      if (!/no (such )?column|has no column named/i.test(String(e))) {
+        console.log(JSON.stringify({ ...rec, _dberr: String(e) }));
+        return;
+      }
       try {
         await env.EXHUME_DB.prepare(
           `INSERT INTO attempts (ts, player, level, channel, verdict, filters, tags, candles_left, message, response)

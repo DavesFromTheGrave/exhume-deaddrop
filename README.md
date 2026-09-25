@@ -124,7 +124,10 @@ Server-side, and trustworthy: the word is derived from `SERVER_KEY` and never
 sent outside an earned reply and the reveal; every claim is checked on the
 Worker; exchanges, guesses, attempts, locks and level gating
 (`worker/progress.js`), one request at a time per player; the daily, per-IP and
-global caps; and the conversation itself. The transcript lives in the open
+global caps; and the conversation itself. "One at a time" is exact on the Node
+host, where one process owns the store. On Workers it holds within an isolate
+only; parallel requests landing in different isolates can still race, and a
+Durable Object per player is the fix if Workers becomes the host. The transcript lives in the open
 attempt on the server, so every turn the guard sees passed the input filters, and
 a browser cannot add or forge turns. Each exchange is stored as the player saw
 it, so a reply that earned the word holds it until the attempt closes. Words are

@@ -18,7 +18,7 @@
 // request at a time per player (lock.js).
 // Which campaign is live (the 35 or the 15) comes from env.LADDER; see ladder.js.
 
-import { ladderFor, wordId } from "./ladder.js";
+import { ladderFor, wordKey } from "./ladder.js";
 import { deriveSecret, claimMatches } from "./secret.js";
 import { runInputFilters, runOutputFilters, tagTechnique, redact, detectLeak } from "./filters.js";
 import { buildGuardPrompt, buildMessages, personaInfo } from "./guard.js";
@@ -163,22 +163,35 @@ async function handleTurn(env, body, id) {
     return json({ closed: true, reason: spend.state.reason, allowance: spend.state, progress: levelView(rec, level, admin) });
   }
 
-  const secret = await deriveSecret(serverKey(env), pid, wordId(lad, level.id), open.seed);
+  const key = wordKey(serverKey(env), lad);
+  const secret = await deriveSecret(key, pid, level.id, open.seed);
   const decoys = [];
   for (let i = 0; i < (level.decoys || 0); i++) {
-    decoys.push(await deriveSecret(serverKey(env), pid, wordId(lad, level.id * 100 + i + 1), open.seed));
+    decoys.push(await deriveSecret(key, pid, level.id * 100 + i + 1, open.seed));
   }
   const extraRules = level.adaptive ? adaptiveRules(rec) : [];
   const system = buildGuardPrompt(level, secret, { decoys, extraRules });
   const messages = buildMessages(level, history, message);
 
-  let raw;
+  const ask = (msgs) => callProvider(env, { system, messages: msgs, secret, level, playerMessage: message });
+  let raw, err = null;
   try {
-    raw = await callProvider(env, { system, messages, secret, level, playerMessage: message });
+    raw = await ask(messages);
   } catch (e) {
-    const allowance = await refundCandle(env, pid, ip, admin);
-    await log({ verdict: "error", candlesLeft: allowance.candlesLeft, response: String(e) });
-    const f = providerFailure(e);
+    err = e;
+    // Over the provider's per-request token cap: once more without the replayed
+    // history, so a long conversation cannot wedge the attempt.
+    if (e && e.status === 413 && history.length) {
+      try { raw = await ask(buildMessages(level, [], message)); err = null; } catch (e2) { err = e2; }
+    }
+  }
+  if (err) {
+    // The exchange is never spent on a failed turn. The candle is refunded only if
+    // the provider did no work (rate limit, too large, network, timeout); a
+    // completion it ran and billed (an empty reply) still counts against the caps.
+    const allowance = err.billed ? spend.state : await refundCandle(env, pid, ip, admin);
+    await log({ verdict: "error", candlesLeft: allowance.candlesLeft, response: String(err) });
+    const f = providerFailure(err);
     return json({ error: f.error, code: f.code, allowance, progress: levelView(rec, level, admin) }, f.status);
   }
 
@@ -225,7 +238,7 @@ async function handleClaim(env, body, id) {
   if (!open) return json({ error: "Enter the level first.", code: "NO_ATTEMPT" }, 409);
   if (open.guesses >= level.digs) return json({ error: "No guesses left on this attempt.", code: "NO_GUESSES", progress: levelView(rec, level, admin) }, 409);
 
-  const secret = await deriveSecret(serverKey(env), pid, wordId(lad, level.id), open.seed);
+  const secret = await deriveSecret(wordKey(serverKey(env), lad), pid, level.id, open.seed);
   const win = claimMatches(body.claim || "", secret);
   const won = win ? winningTurn(open, secret) : null;
   const winningMessage = won ? won.user : "";
@@ -237,7 +250,7 @@ async function handleClaim(env, body, id) {
     message: `CLAIM: ${body.claim || ""}`,
   });
 
-  const r = await noteGuess(env, pid, level, { win, tags, admin });
+  const r = await noteGuess(env, pid, level, { win, tags, admin, claim: body.claim || "" });
   if (!win) {
     return json({ win: false, attemptFailed: r.attemptFailed, progress: r.view });
   }

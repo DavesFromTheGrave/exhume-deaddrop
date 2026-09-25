@@ -120,7 +120,7 @@ export function runOutputFilters(level, reply, secret) {
       const leak = baseLeak(scan, s);
       if (leak) {
         if (JUDGE_FOOLED.test(scan)) continue; // the judge was talked into passing it
-        return { layer: "O4", reason: `semantic judge caught ${leak}` };
+        return { layer: "O4", reason: `judge caught ${leak}` };
       }
     }
   }

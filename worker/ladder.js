@@ -28,10 +28,12 @@ export function ladderFor(env) {
   return LADDERS[ladderId(env)];
 }
 
-// The id a word is derived from (secret.js). The 35 keeps the bare level number,
-// so its words are unchanged; any other ladder mixes its id in, so level N on one
-// ladder never shares a word with level N on another, even on the day of a switch.
-export function wordId(ladder, n) {
+// The key a ladder's words are derived under (secret.js). The 35 keeps the server
+// key, so its words are unchanged; any other ladder gets a key of its own, so level
+// N on one ladder never shares a word with level N on another, whatever player id
+// is sent (the HMAC message is player:level:day, which a player id could imitate;
+// the key is out of the player's reach).
+export function wordKey(serverKey, ladder) {
   const id = typeof ladder === "string" ? ladder : ladder.META.id;
-  return id === DEFAULT_LADDER ? n : `${id}:${n}`;
+  return id === DEFAULT_LADDER ? serverKey : `${serverKey}\u0000ladder:${id}`;
 }

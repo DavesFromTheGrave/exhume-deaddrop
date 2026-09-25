@@ -1,10 +1,12 @@
 // progress.js — what the server remembers about a player: which levels are
 // cleared, the attempt in progress on each level, failed attempts and locks.
 //
-// One record per player id (server-issued cookie, see server.mjs), stored as
-// JSON under p:<id>. Nothing in it is secret; the word is never stored, it is
-// derived from the attempt's pinned seed (secret.js), so an attempt that crosses
-// UTC midnight keeps the word it started with.
+// One record per player id (server-issued cookie, see server.mjs) per ladder,
+// stored as JSON under p:<id> (the 35) or p@<ladder>:<id>. The word itself is
+// derived from the attempt's pinned seed (secret.js), not stored, so an attempt
+// that crosses UTC midnight keeps the word it started with. The record is not
+// free of secrets, though: the open attempt's transcript holds the replies the
+// player was shown, and a reply that earned the word contains it.
 //
 // Rules (Dave, 2026-09-16):
 //   - level N opens when N-1 is cleared (replaying a cleared level is fine)
@@ -28,9 +30,22 @@ const HINTS_PER_ATTEMPT = 2;
 const WINS_REMEMBERED = 8;
 const TRANSCRIPT_MAX_CHARS = 60000;   // what a resume can show; oldest turns drop first
 // What is replayed to the guard. Groq's free tier caps one request at about 8,000
-// tokens including the reply budget; ~16,000 characters of history (~4,000 tokens)
-// leaves room for the guard prompt, a 4,000-character message and the reply.
-const HISTORY_CHAR_BUDGET = 16000;
+// tokens including the reply budget; ~4,000 estimated tokens of history leaves
+// room for the guard prompt, the message and the reply. A request that is still
+// too large is retried once without history (index.js).
+const HISTORY_TOKEN_BUDGET = 4000;
+
+// A deliberately high token estimate. English runs about 4 characters a token,
+// but long unbroken letter-and-digit runs (base64, hex) run nearer 1.4, and CJK
+// text about one character a token, which a plain character count misses.
+export function estimateTokens(text) {
+  const s = String(text || "");
+  let n = 0, dense = 0;
+  for (const run of s.match(/[A-Za-z0-9+/=]{16,}/g) || []) { n += run.length / 1.4; dense += run.length; }
+  const wide = (s.match(/[^\x00-\x7f]/g) || []).length;
+  n += wide + (s.length - dense - wide) / 3.5;
+  return Math.ceil(n);
+}
 
 // Channels where earlier turns are replayed to the guard as a conversation. On the
 // document and tool channels the player is data, never a speaker, so no history.
@@ -39,14 +54,15 @@ export function keepsHistory(level) {
 }
 
 // The open attempt's conversation as provider messages: answered turns only
-// (a blocked message never reached the guard), newest first until the budget.
-export function historyFor(open, level, budget = HISTORY_CHAR_BUDGET) {
+// (a blocked message never reached the guard; hints and guesses are not turns),
+// newest first until the token budget.
+export function historyFor(open, level, budget = HISTORY_TOKEN_BUDGET) {
   if (!open || !keepsHistory(level)) return [];
   const kept = [];
   let size = 0;
   for (const t of (open.turns || []).slice().reverse()) {
     if (t.assistant == null) continue;
-    size += t.user.length + t.assistant.length;
+    size += estimateTokens(t.user) + estimateTokens(t.assistant);
     if (size > budget) break;
     kept.unshift(t);
   }
@@ -159,7 +175,7 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
     if (turn.filtered) t.filtered = turn.filtered;
     if (turn.blocked) t.blocked = turn.blocked;
     turns.push(t);
-    const len = (x) => x.user.length + (x.assistant ? x.assistant.length : 0);
+    const len = (x) => (x.user || "").length + (x.assistant || "").length + (x.hint || "").length;
     let size = turns.reduce((n, x) => n + len(x), 0);
     while (turns.length > 1 && size > TRANSCRIPT_MAX_CHARS) size -= len(turns.shift());
   }
@@ -169,7 +185,7 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
 
 // One guess spent. On a win the level is cleared and the attempt closes; on the
 // last miss the attempt fails and may lock the level.
-export async function noteGuess(env, pid, level, { win, tags = [], admin = false }) {
+export async function noteGuess(env, pid, level, { win, tags = [], admin = false, claim = "" }) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
   if (!s.open) return null;
@@ -182,6 +198,8 @@ export async function noteGuess(env, pid, level, { win, tags = [], admin = false
     if (rec.wins.length > WINS_REMEMBERED) rec.wins.splice(0, rec.wins.length - WINS_REMEMBERED);
   } else {
     s.open.guesses += 1;
+    // a missed guess is part of what the player saw; shown again on resume
+    (s.open.turns || (s.open.turns = [])).push({ miss: String(claim).slice(0, 200) });
     if (s.open.guesses >= level.digs) { failAttempt(env, s, level, admin); attemptFailed = true; }
   }
   await savePlayer(env, pid, rec);
@@ -200,6 +218,8 @@ export async function useHint(env, pid, level, admin) {
   const hint = hints[s.open.hints];
   s.open.hints += 1;
   s.open.msgs += 1;
+  // a bought hint is shown again on resume (never replayed to the guard)
+  (s.open.turns || (s.open.turns = [])).push({ hint, index: s.open.hints });
   await savePlayer(env, pid, rec);
   return { hint, index: s.open.hints, view: levelView(rec, level, admin) };
 }
