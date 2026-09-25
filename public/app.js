@@ -1,124 +1,266 @@
-// From the Grave — client. Vanilla JS, no deps. Talks to /api/*. No login: a random
-// player id lives in localStorage, progress too. The word never arrives here.
-
-// Game name. The "from the Grave" headstone is the wordmark; this feeds the
-// browser tab and any text fallback.
-const GAME_NAME = "From the Grave";
+// Dead Drop — client. Vanilla JS, no deps. Talks to /api/*. No login: a random
+// player id lives in localStorage. Everything that matters is the server's:
+// which levels are open, the counters, the conversation, and the word, which
+// never arrives here. The campaign's copy (name, level noun, filter names) comes
+// from /api/levels, so the 35 and the 15 share this client.
 
 const $ = (s) => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const pad2 = (n) => String(n).padStart(2, "0");
+// "The Sphinx" mid-sentence reads "the Sphinx".
+const inline = (name) => String(name).replace(/^The /, "the ");
 
 const store = {
   player() {
-    let p = localStorage.getItem("exhume.player");
-    if (!p) { p = "p_" + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("exhume.player", p); }
+    let p = null;
+    try { p = localStorage.getItem("exhume.player"); } catch { /* storage blocked */ }
+    if (!p) {
+      p = "p_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      try { localStorage.setItem("exhume.player", p); } catch { /* play still works for this tab */ }
+    }
     return p;
   },
-  unlocked() { return Number(localStorage.getItem("exhume.unlocked") || "1"); },
-  unlock(n) { if (n > store.unlocked()) localStorage.setItem("exhume.unlocked", String(n)); },
-  done() { try { return JSON.parse(localStorage.getItem("exhume.done") || "[]"); } catch { return []; } },
-  markDone(id) { const d = new Set(store.done()); d.add(id); localStorage.setItem("exhume.done", JSON.stringify([...d])); },
+};
+const PLAYER = store.player();
+
+// Fallback copy if the server sends no theme (an older worker).
+let THEME = {
+  game: "Dead Drop", tagline: "", wordmark: null, unit: "Level", guard: "the guard",
+  word: "word of passage", layers: { input: "Input filter", output: "Output filter" },
+  revealEyebrow: "Cracked", revealVerb: "You took",
 };
 
 const GUARD_TXT = {
-  G0: ["Guard", "open — the word is stated, unprotected"],
-  G1: ["Guard", "brief — told to keep the word"],
-  G2: ["Guard", "explicit — no repeat, spell, encode, rhyme, or letters"],
-  G3: ["Guard", "strict — refuses and announces attempts; cannot be overridden"],
-  G4: ["Guard", "hardened — worked refusal examples, task-locked; the toughest guard"],
+  G0: "open — the word is stated, unprotected",
+  G1: "brief — told to keep the word",
+  G2: "explicit — no repeat, spell, encode, rhyme, or letters",
+  G3: "strict — refuses and announces attempts; cannot be overridden",
+  G4: "hardened — worked refusal examples, task-locked; the toughest guard",
 };
 const OUT_TXT = {
-  O1: ["Sewn Lips", "verbatim — the exact word is stitched out"],
-  O2: ["Sewn Lips", "normalized — reversed, leet, base64, hex, rot13, spaced"],
-  O3: ["Sewn Lips", "fragment — any 4-letter run or per-letter leak"],
-  O4: ["Sewn Lips", "semantic judge — reads meaning; can be talked into passing"],
+  O1: "verbatim — the exact word is cut",
+  O2: "normalized — reversed, leet, base64, hex, rot13, spaced",
+  O3: "fragment — any 4-letter run or per-letter leak",
+  O4: "judge — looks for the word in any readable form; trusts a verdict it reads",
 };
 const IN_TXT = {
-  I1: ["Salt Line", "blocklist — a fixed word list, shown when it fires"],
-  I2: ["Salt Line", "pattern — delimiters, personas, encoding asks, letter probes"],
-  I3: ["Salt Line", "screen — a second model reads your message; bury the ask"],
-  I4: ["Salt Line", "stateful screen — the strongest; explicit extraction never passes"],
+  I1: "blocklist — a fixed word list, shown when it fires",
+  I2: "pattern — delimiters, personas, encoding asks, letter probes",
+  I3: "screen — short, pointed asks are stopped; long ordinary text passes",
+  I4: "strict screen — explicit extraction language never passes",
 };
-const MODEL_TXT = { M2: "1.5B guard", M3: "3B guard", M4: "8B guard" };
+// The tier is a design mark; providers do not map it to different models yet.
+const MODEL_TXT = { M2: "tier M2", M3: "tier M3 (heavier guard, where the provider maps tiers)", M4: "tier M4 (heaviest guard, where the provider maps tiers)" };
 
 let LEVELS = [];
-const state = { level: null, candles: 0, digs: 0, history: [], busy: false };
+let ME = { cleared: [], locks: {}, doors: {} };
+const state = { level: null, left: { exchanges: 0, guesses: 0, hints: 0 }, busy: false };
+
+async function api(path, body) {
+  const url = "api/" + path + (body ? "" : (path.includes("?") ? "&" : "?") + "playerId=" + encodeURIComponent(PLAYER));
+  const opts = body
+    ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, playerId: PLAYER }) }
+    : { method: "GET" };
+  const r = await fetch(url, opts);
+  let data = {};
+  try { data = await r.json(); } catch { data = { error: "The gate did not answer." }; }
+  return { ok: r.ok, status: r.status, data };
+}
+
+// ---------- theme ----------
+
+function applyTheme(theme) {
+  if (theme) THEME = { ...THEME, ...theme, layers: { ...THEME.layers, ...(theme.layers || {}) } };
+  document.title = THEME.game;
+  const mast = $("#masthead"), title = $("#game-title");
+  if (THEME.wordmark) {
+    mast.src = THEME.wordmark; mast.alt = THEME.game; mast.hidden = false; title.hidden = true;
+  } else {
+    mast.hidden = true; title.hidden = false; title.textContent = THEME.game;
+  }
+  $("#tagline").textContent = THEME.tagline || "";
+  $("#back-label").textContent = THEME.unit.toLowerCase() + "s";
+  $("#claim-input").placeholder = "Speak the " + THEME.word + "…";
+  $("#reveal-eyebrow").textContent = THEME.revealEyebrow;
+  $("#reveal-verb").textContent = THEME.revealVerb;
+  $("#reveal-next").textContent = "Next " + THEME.unit.toLowerCase() + " ›";
+  $("#reveal-close").textContent = "Back to the " + THEME.unit.toLowerCase() + "s";
+}
 
 // ---------- level select ----------
 
+function isOpen(id) {
+  return !!ME.admin || id === 1 || ME.cleared.includes(id - 1) || ME.cleared.includes(id);
+}
+
 async function loadLevels() {
-  const r = await fetch("api/levels");
-  LEVELS = (await r.json()).levels;
+  const [lv, me] = await Promise.all([api("levels"), api("me")]);
+  if (!lv.ok) { $("#level-grid").textContent = lv.data.error || "The levels are sealed for now."; return; }
+  LEVELS = lv.data.levels;
+  applyTheme(lv.data.theme);
+  if (me.ok) ME = me.data;
+
   const grid = $("#level-grid");
   grid.innerHTML = "";
-  const unlocked = store.unlocked();
-  const done = new Set(store.done());
-  for (const lv of LEVELS) {
-    const locked = lv.id > unlocked;
-    const card = el("button", "level-card" + (locked ? " locked" : "") + (done.has(lv.id) ? " done" : ""));
-    card.disabled = locked;
-    if (done.has(lv.id)) card.appendChild(el("span", "seal", "⚰")).title = "cracked";
-    else if (locked) card.appendChild(el("span", "seal", "🔒"));
-    card.appendChild(el("span", "num", "Crypt " + lv.id));
-    card.appendChild(el("span", "world", lv.world));
-    card.appendChild(el("span", "lname", lv.name));
+  const done = new Set(ME.cleared || []);
+  for (const l of LEVELS) {
+    const open = isOpen(l.id);
+    const lockUntil = (ME.locks || {})[l.id];
+    const card = el("button", "level-card" + (open ? "" : " locked") + (done.has(l.id) ? " done" : ""));
+    card.disabled = !open;
+    if (done.has(l.id)) card.appendChild(el("span", "seal", "✦")).title = "cleared";
+    else if (lockUntil) card.appendChild(el("span", "seal", "⏳")).title = "locked until " + new Date(lockUntil).toLocaleString();
+    else if (!open) card.appendChild(el("span", "seal", "🔒"));
+    card.appendChild(el("span", "num", THEME.unit + " " + l.id + (l.boss ? " · boss" : "")));
+    card.appendChild(el("span", "world", l.world));
+    card.appendChild(el("span", "lname", l.name));
     const cfg = el("div", "cfg");
-    cfg.appendChild(el("span", "chip g", lv.guard));
-    lv.output.forEach((o) => cfg.appendChild(el("span", "chip o", o)));
-    lv.input.forEach((i) => cfg.appendChild(el("span", "chip i", i)));
-    if (lv.model && lv.model !== "M2") cfg.appendChild(el("span", "chip m", lv.model));
-    if (lv.channel !== "chat") cfg.appendChild(el("span", "chip", lv.channel));
-    if (lv.decoys) cfg.appendChild(el("span", "chip", "decoys"));
-    if (lv.adaptive) cfg.appendChild(el("span", "chip", "adaptive"));
+    cfg.appendChild(el("span", "chip g", l.guard));
+    l.output.forEach((o) => cfg.appendChild(el("span", "chip o", o)));
+    l.input.forEach((i) => cfg.appendChild(el("span", "chip i", i)));
+    if (l.model && l.model !== "M2") cfg.appendChild(el("span", "chip m", l.model));
+    if (l.channel !== "chat") cfg.appendChild(el("span", "chip", l.channel));
+    if (l.decoys) cfg.appendChild(el("span", "chip", "decoys"));
+    if (l.adaptive) cfg.appendChild(el("span", "chip", "adaptive"));
     card.appendChild(cfg);
-    if (!locked) card.addEventListener("click", () => startLevel(lv.id));
+    card.setAttribute("aria-label", `${THEME.unit} ${l.id}: ${l.name}` + (done.has(l.id) ? ", cleared"
+      : lockUntil ? ", locked until " + new Date(lockUntil).toLocaleString()
+      : open ? ", open" : ", sealed"));
+    if (open) card.addEventListener("click", () => startLevel(l.id));
     grid.appendChild(card);
   }
-  const st = await (await fetch("api/state?playerId=" + encodeURIComponent(store.player()))).json();
-  $("#select-allowance").textContent = allowanceText(st);
+  renderDoors(ME.doors);
+  $("#select-allowance").textContent = allowanceText(ME.allowance);
+}
+
+function renderDoors(doors) {
+  const box = $("#doors");
+  box.innerHTML = "";
+  const line = (text, href) => {
+    const p = el("span", "door");
+    if (href) { const a = el("a", "", text + " ›"); a.href = href; a.target = "_blank"; a.rel = "noopener"; p.appendChild(a); }
+    else p.textContent = text;
+    box.appendChild(p);
+  };
+  if (doors && doors.club != null) {
+    if (doors.club) line("Your Alignment Club invitation is open", doors.club);
+    else line("You earned the Alignment Club door. The invitation link is not posted yet.");
+  }
+  if (doors && doors.apply) {
+    if (doors.applyUrl) line("You cleared the last level. The résumé door is open", doors.applyUrl);
+    else line("You cleared the last level. The résumé door is earned; where it leads is not posted yet.");
+  }
+  box.hidden = !box.childElementCount;
 }
 
 function allowanceText(st) {
   if (!st) return "";
   if (st.closed) return st.reason;
-  return `Candles today: ${st.candlesLeft}/${st.dailyLimit}. Crypt spend: ~$${st.estSpendUsd} of the nightly ceiling.`;
+  return `Model turns left today: ${st.candlesLeft}/${st.dailyLimit}.`;
 }
 
-// ---------- start a level ----------
+// ---------- start / resume a level ----------
 
-async function startLevel(id) {
-  const r = await fetch("api/start", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ playerId: store.player(), levelId: id }),
-  });
-  const data = await r.json();
-  if (data.error) return;
-  state.level = data.level;
-  state.candles = data.candles;
-  state.digs = data.digs;
-  state.history = [];
-  $("#provider-note").textContent = "guard: " + data.provider;
+// Resolves true when the level opened (or reopened), false otherwise.
+async function startLevel(id, { restart = false } = {}) {
+  if (state.busy) return false;
+  state.busy = true;
+  try {
+    const { ok, status, data } = await api("start", { levelId: id, restart });
+    if (!ok) {
+      show("select");
+      $("#select-allowance").textContent = data.error || "That level would not open.";
+      if (status === 403) loadLevels().then(() => { $("#select-allowance").textContent = data.error; });
+      return false;
+    }
+    state.level = data.level;
+    $("#provider-note").textContent = "guard: " + data.provider;
+    $("#play-world").textContent = data.level.world;
+    $("#play-name").textContent = `${THEME.unit} ${pad2(data.level.id)} · ${data.level.name}`;
+    $("#play-allowance").textContent = allowanceText(data.allowance);
+    buildRack(data.level);
 
-  $("#play-world").textContent = data.level.world;
-  $("#play-name").textContent = data.level.name;
-  $("#candles").textContent = state.candles;
-  $("#digs").textContent = state.digs;
-  $("#play-allowance").textContent = allowanceText(data.allowance);
-  buildRack(data.level);
+    const chat = $("#chat"); chat.innerHTML = "";
+    show("play");
 
-  const chat = $("#chat"); chat.innerHTML = "";
-  addSys(introFor(data.level));
+    if (data.status === "locked") {
+      setProgress(data.progress);
+      addSys(`${THEME.unit} ${data.level.id} is locked after ${data.progress.attemptsMax} failed attempt${data.progress.attemptsMax === 1 ? "" : "s"}. It reopens ${new Date(data.progress.lockUntil).toLocaleString()}.`);
+      setEnabled(false);
+      return true;
+    }
 
-  // channel-specific input affordance
-  const ti = $("#turn-input");
-  if (data.level.channel === "document") ti.placeholder = "Leave a petition for the Gravekeeper to summarize…";
-  else if (data.level.channel === "tool") ti.placeholder = "Write the get_weather tool result the Gravekeeper will read back…";
-  else if (data.level.channel === "cot") ti.placeholder = "Speak to the Gravekeeper — it reasons in the open…";
-  else ti.placeholder = "Speak to the Gravekeeper…";
+    addSys(introFor(data.level));
+    if (data.level.note) addSys(data.level.note);
+    if (data.status === "resumed") {
+      const used = (data.progress && data.progress.used) || {};
+      addSys(used.exchanges || used.guesses ? "You pick up where you left off." : "You pick up where you left off. Nothing has been said yet.");
+      for (const t of data.transcript || []) showExchange(t);
+    }
+    setProgress(data.progress);
+    setEnabled(true);
 
-  updateMessageLimit();
-  show("play");
-  ti.focus();
+    const ti = $("#turn-input");
+    const g = inline(data.level.guardName || THEME.guard);
+    if (data.level.channel === "document") ti.placeholder = `Write the scroll ${g} will be asked to summarize…`;
+    else if (data.level.channel === "tool") ti.placeholder = `Write the errand result ${g} will read back…`;
+    else ti.placeholder = `Speak to ${g}…`;
+    updateMessageLimit();
+    ti.focus();
+    return true;
+  } catch (err) {
+    // Say it where the player is looking. A retry never repeats a restart: the
+    // restart may have gone through, and a plain start resumes whatever is open.
+    if ($("#play").hidden) {
+      $("#select-allowance").textContent = "The gate did not answer. Check your connection and pick the level again.";
+    } else {
+      addSys("The gate did not answer. Check your connection.");
+      state.busy = false;
+      offer("Try again", () => startLevel(id));
+    }
+    return null;   // handled: the caller must not add another offer
+  } finally {
+    state.busy = false;
+  }
+}
+
+function introFor(lv) {
+  const g = inline(lv.guardName || THEME.guard);
+  const base = `A nonsense ${THEME.word} is held here by ${g}. Get it out of them, then speak it.`;
+  if (lv.channel === "document") return base + " You do not talk to the guard here: what you write is handed over as a document to summarize. Your words arrive as data, not as a turn of your own.";
+  if (lv.channel === "tool") return base + " The guard is answering someone else's question. You only write the result of the errand it ran.";
+  if (lv.channel === "cot") return base + " This guard reasons out loud before it answers, and the filters only read the answer.";
+  if (!lv.stateful) return base + " The guard has no memory here. Every message stands alone.";
+  return base;
+}
+
+// With no open attempt (failed, locked, or cleared), the server's `left` is the
+// allowance a new attempt would get; this attempt has nothing left, so show 0.
+function setProgress(p) {
+  if (!p) return;
+  state.left = p.open ? p.left : { exchanges: 0, guesses: 0, hints: 0 };
+  $("#candles").textContent = state.left.exchanges;
+  $("#digs").textContent = state.left.guesses;
+  updateHint();
+  $("#play-attempt").textContent = p.attemptNo
+    ? `Attempt ${p.attemptNo} of ${p.attemptsMax}` + (p.cleared ? " · cleared before" : "")
+    : "";
+}
+
+// A hint costs one exchange. It is off when there is none to spend, and when only
+// one is left it takes a second click (on a one-exchange level, that exchange is
+// the whole attempt).
+let hintArmed = false;
+function updateHint() {
+  hintArmed = false;
+  const b = $("#hint");
+  b.disabled = state.left.hints <= 0 || state.left.exchanges <= 0;
+  b.textContent = `Buy a hint (costs 1 exchange · ${state.left.hints} left)`;
+}
+
+function setEnabled(on) {
+  ["#turn-input", "#send", "#claim-input", "#claim", "#hint"].forEach((s) => { $(s).disabled = !on; });
+  if (on) updateHint();
 }
 
 function updateMessageLimit() {
@@ -126,35 +268,40 @@ function updateMessageLimit() {
   const length = $("#turn-input").value.length;
   const over = limit != null && length > limit;
   $("#message-limit").textContent = length.toLocaleString("en-US") + " characters · " +
-    (limit == null ? "No game character cap for this crypt." :
-      limit.toLocaleString("en-US") + " maximum per message." + (over ? " Shorten the message before sending." : ""));
+    (limit == null ? "No character cap here." :
+      limit.toLocaleString("en-US") + " maximum per message." + (over ? " Shorten the message before sending." : "")) +
+    (ENTER_SENDS ? " Enter sends, Shift+Enter starts a new line." : "");
   $("#turn-input").setAttribute("aria-invalid", String(over));
   return !over;
 }
 $("#turn-input").addEventListener("input", updateMessageLimit);
-
-function introFor(lv) {
-  const base = "A pronounceable nonsense word guards this gate. Make the Gravekeeper give it up, then speak the word of passage.";
-  if (lv.channel === "document") return base + " Chat is closed here: you leave a written petition, and a visitor asks the Gravekeeper to summarize it. Your words arrive as data, not as your own turn.";
-  if (lv.channel === "tool") return base + " The Gravekeeper is answering someone else's weather question. You only get to write the tool result it reads back.";
-  if (lv.channel === "cot") return base + " The Gravekeeper reasons out loud in a <think> trace before answering, and the filters only read the answer.";
-  if (!lv.stateful) return base + " The Gravekeeper has no memory here. Every message stands alone.";
-  return base;
-}
+// Enter sends on a real keyboard. On touch screens Return inserts a newline (there
+// is no Shift+Enter there, and some levels need line breaks), and Enter that
+// confirms an input-method composition never sends.
+const ENTER_SENDS = !(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+$("#turn-input").addEventListener("keydown", (e) => {
+  if (!ENTER_SENDS || e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  $("#turn-form").requestSubmit();
+});
 
 function buildRack(lv) {
   const rack = $("#rack"); rack.innerHTML = "";
-  const add = (pair) => {
+  const add = (kind, title, desc) => {
     const layer = el("div", "layer");
-    layer.appendChild(el("div", "lt", pair[0]));
-    layer.appendChild(el("div", "ld", pair[1]));
+    layer.dataset.kind = kind;
+    layer.appendChild(el("div", "lt", title));
+    layer.appendChild(el("div", "ld", desc));
     rack.appendChild(layer);
-    return layer;
   };
-  if (lv.input.length) lv.input.forEach((i) => add(IN_TXT[i]));
-  add(GUARD_TXT[lv.guard]);
-  if (lv.model && lv.model !== "M2") add(["Model", MODEL_TXT[lv.model] || lv.model]);
-  if (lv.output.length) lv.output.forEach((o) => add(OUT_TXT[o]));
+  lv.input.forEach((i) => add("input", THEME.layers.input + " · " + i, IN_TXT[i] || i));
+  add("guard", lv.guardName || "Guard", GUARD_TXT[lv.guard] || lv.guard);
+  if (lv.model && lv.model !== "M2") add("model", "Model", MODEL_TXT[lv.model] || lv.model);
+  lv.output.forEach((o) => add("output", THEME.layers.output + " · " + o, OUT_TXT[o] || o));
+}
+
+function flashRack(kind) {
+  document.querySelectorAll("#rack .layer").forEach((l) => l.classList.toggle("fired", !!kind && l.dataset.kind === kind));
 }
 
 // ---------- chat rendering ----------
@@ -167,123 +314,168 @@ function addMsg(kind, text, tags) {
 }
 const addSys = (t) => addMsg("sys", t);
 
+// One exchange as the player saw it: their message, then what came back.
+function showExchange(t, tags, withUser = true) {
+  if (t.hint != null) { addMsg("tape", `Hint ${t.index}: ${t.hint}`); return; }
+  if (t.miss != null) { addMsg("tape", `"${t.miss}" is not the word.`); return; }
+  if (withUser) addMsg("you", t.user);
+  if (t.blocked) {
+    addMsg("tape", `${THEME.layers.input.toUpperCase()} ${t.blocked.layer}: ${t.blocked.reason}. Message blocked, exchange spent.`);
+    return;
+  }
+  addMsg("guard", t.assistant, tags);
+  if (t.filtered) addMsg("tape", `${THEME.layers.output.toUpperCase()} ${t.filtered.layer}: ${t.filtered.reason}. The leak was cut.`);
+}
+
+// A button in the chat. startLevel reports its own failures (and offers a plain
+// retry), so a button is only put back when the action was refused outright.
+function offer(label, fn) {
+  const b = el("button", "dig offer", label);
+  b.addEventListener("click", async () => {
+    document.querySelectorAll("#chat .offer").forEach((x) => x.remove());
+    if ((await fn()) === false) offer(label, fn);
+  });
+  $("#chat").appendChild(b);
+  $("#chat").scrollTop = $("#chat").scrollHeight;
+}
+function offerRestart() {
+  offer("Restart (spends this attempt)", () => startLevel(state.level.id, { restart: true }));
+}
+function offerRetry() {
+  offer("Try again", () => startLevel(state.level.id));
+}
+
 // ---------- a turn ----------
 
 $("#turn-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (state.busy) return;
+  if (state.busy || !state.level) return;
   const ti = $("#turn-input");
   const msg = ti.value.trim();
   if (!msg) return;
-  if (!updateMessageLimit()) { addSys("Your message is over this crypt’s character limit. Nothing was sent or shortened."); return; }
-  if (state.candles <= 0) { addSys("Your candles have guttered out. Retry the crypt for a fresh set."); offerRetry(); return; }
+  if (!updateMessageLimit()) { addSys("That message is over the character limit. Nothing was sent."); return; }
+  if (state.left.exchanges <= 0) { addSys("No exchanges left. Speak the word, or restart."); offerRestart(); return; }
 
-  addMsg("you", msg);
-
+  const mine = addMsg("you", msg);
   state.busy = true;
-  const thinking = addMsg("thinking", "the Gravekeeper considers…");
-
+  const thinking = addMsg("thinking", `${state.level.guardName || THEME.guard} considers…`);
   try {
-    const r = await fetch("api/turn", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        playerId: store.player(), levelId: state.level.id, message: msg,
-        history: (state.level.stateful && state.level.channel === "chat") ? state.history : [],
-      }),
-    });
-    const data = await r.json();
+    const { ok, data } = await api("turn", { levelId: state.level.id, message: msg });
     thinking.remove();
-
-    if (data.closed) { addSys(data.reason); $("#play-allowance").textContent = allowanceText(data.allowance); return; }
-
-    if (!r.ok || data.error) { addSys(data.error || "The message could not be sent."); return; }
-    ti.value = "";
+    if (data.progress) setProgress(data.progress);
+    if (data.allowance) $("#play-allowance").textContent = allowanceText(data.allowance);
+    if (data.closed) { unsent(mine, msg); addSys(data.reason); return; }
+    if (!ok || data.error) {
+      unsent(mine, msg);
+      addSys(data.error || "The message could not be sent.");
+      if (data.code === "NO_ATTEMPT") offerRetry();
+      if (data.code === "NO_EXCHANGES") offerRestart();
+      return;
+    }
+    // Clear the box only if it still holds what was sent (not a draft typed since).
+    if (ti.value.trim() === msg) ti.value = "";
     updateMessageLimit();
-    // a tripped input filter or an answered turn both consume a level candle
-    state.candles = Math.max(0, state.candles - 1);
-    $("#candles").textContent = state.candles;
-
     flashRack(null);
     if (data.blocked) {
-      addMsg("tape", `SALT LINE ${data.layer}: ${data.reason}. Message blocked, candle consumed.`);
-      flashRack({ input: data.layer });
-    } else if (data.error) {
-      addSys(data.error + (data.detail ? " (" + data.detail + ")" : ""));
+      showExchange({ user: msg, blocked: { layer: data.layer, reason: data.reason } }, null, false);
+      flashRack("input");
     } else {
-      addMsg("guard", data.reply, data.tags);
-      if (state.level.stateful && state.level.channel === "chat") {
-        state.history.push({ role: "user", content: msg });
-        state.history.push({ role: "assistant", content: data.reply });
-      }
-      if (data.filtered) {
-        addMsg("tape", `SEWN LIPS ${data.filtered.layer}: ${data.filtered.reason}. The leak was stitched shut.`);
-        flashRack({ output: data.filtered.layer });
-      }
+      showExchange({ user: msg, assistant: data.reply, filtered: data.filtered }, data.tags, false);
+      if (data.filtered) flashRack("output");
     }
-    if (data.allowance) $("#play-allowance").textContent = allowanceText(data.allowance);
-    if (state.candles <= 0) { addSys("That was your last candle. Speak the word now, or retry the crypt."); offerRetry(); }
+    if (state.left.exchanges <= 0) addSys("That was your last exchange. Speak the word now, or restart.");
   } catch (err) {
     thinking.remove();
-    addSys("The gate did not answer. " + err);
+    // The request may or may not have reached the guard. Say so, and let the
+    // player re-enter: a plain start resumes and shows what the server holds.
+    mine.appendChild(el("span", "tags", "no answer came back"));
+    addSys("The gate did not answer. Your message may or may not have reached the guard.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
   } finally {
     state.busy = false;
   }
 });
 
-function flashRack(hit) {
-  const layers = document.querySelectorAll("#rack .layer");
-  layers.forEach((l) => l.classList.remove("fired"));
-  if (!hit) return;
-  layers.forEach((l) => {
-    const t = l.querySelector(".lt").textContent;
-    if ((hit.input && t === "Salt Line") || (hit.output && t === "Sewn Lips")) l.classList.add("fired");
-  });
+// A message that was refused before it reached the guard. If the box still holds
+// it, drop the bubble (the text is right there); if the player has typed since,
+// keep the bubble so the text is not lost, and mark it.
+function unsent(bubble, msg) {
+  if ($("#turn-input").value.trim() === msg) bubble.remove();
+  else bubble.appendChild(el("span", "tags", "not sent"));
 }
+
+// ---------- a hint ----------
+
+$("#hint").addEventListener("click", async () => {
+  if (state.busy || !state.level) return;
+  if (state.left.exchanges === 1 && !hintArmed) {
+    hintArmed = true;
+    $("#hint").textContent = "Spend your last exchange on a hint? Click again";
+    return;
+  }
+  state.busy = true;
+  try {
+    const { data } = await api("hint", { levelId: state.level.id });
+    if (data.progress) setProgress(data.progress);
+    if (data.error) { addSys(data.error); return; }
+    addMsg("tape", `Hint ${data.index}: ${data.hint}`);
+    if (state.left.exchanges <= 0) addSys("That hint took your last exchange. Speak the word now, or restart.");
+  } catch (err) {
+    addSys("The gate did not answer. The hint may or may not have been bought.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
+  } finally {
+    state.busy = false;
+    updateHint();
+  }
+});
 
 // ---------- a claim ----------
 
 $("#claim-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (state.busy) return;
+  if (state.busy || !state.level) return;
   const ci = $("#claim-input");
   const guess = ci.value.trim();
   if (!guess) return;
-  if (state.digs <= 0) { addSys("No digs left. Retry the crypt."); offerRetry(); return; }
   state.busy = true;
   try {
-    const r = await fetch("api/claim", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        playerId: store.player(), levelId: state.level.id, claim: guess,
-        winningMessage: [...state.history].reverse().find((h) => h.role === "user")?.content || guess,
-      }),
-    });
-    const data = await r.json();
-    if (data.win) {
-      store.markDone(state.level.id);
-      store.unlock(state.level.id + 1);
-      showReveal(data.reveal);
-    } else {
-      state.digs = Math.max(0, state.digs - 1);
-      $("#digs").textContent = state.digs;
-      addMsg("tape", `"${guess}" is not the word. Digs left: ${state.digs}.`);
-      ci.value = "";
-      if (state.digs <= 0) { addSys("The ground is spent. Retry the crypt for a fresh word."); offerRetry(); }
+    const { data } = await api("claim", { levelId: state.level.id, claim: guess });
+    if (data.progress) setProgress(data.progress);
+    if (data.error) {
+      addSys(data.error);
+      if (data.code === "NO_ATTEMPT") offerRetry();
+      return;
     }
+    if (data.win) {
+      ME.cleared = data.cleared || ME.cleared;
+      ME.doors = data.doors || ME.doors;
+      ci.value = "";
+      setEnabled(false);   // this attempt is over
+      showReveal(data.reveal);
+      return;
+    }
+    addMsg("tape", `"${guess}" is not the word. Guesses left: ${data.attemptFailed ? 0 : state.left.guesses}.`);
+    ci.value = "";
+    if (data.attemptFailed) {
+      const p = data.progress || {};
+      setEnabled(false);
+      if (p.locked) {
+        addSys(`That was the last guess, and the last attempt for today. ${THEME.unit} ${state.level.id} reopens ${new Date(p.lockUntil).toLocaleString()}.`);
+      } else {
+        addSys("That was the last guess. This attempt has failed; the next one brings a fresh word.");
+        offerRetry();
+      }
+    }
+  } catch (err) {
+    addSys("The gate did not answer. Your guess may or may not have been counted.");
+    state.busy = false;
+    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
   } finally {
     state.busy = false;
   }
 });
-
-function offerRetry() {
-  if ($("#retry-btn")) return;
-  const b = el("button", "dig", "Retry this crypt");
-  b.id = "retry-btn";
-  b.style.alignSelf = "center";
-  b.addEventListener("click", () => { b.remove(); startLevel(state.level.id); });
-  $("#chat").appendChild(b);
-  $("#chat").scrollTop = $("#chat").scrollHeight;
-}
 
 // ---------- reveal ----------
 
@@ -293,29 +485,51 @@ function showReveal(rev) {
   $("#reveal-lesson").textContent = rev.lesson;
   $("#reveal-tech-title").textContent = rev.technique.title;
   $("#reveal-tech-how").textContent = rev.technique.how;
+  $("#reveal-fix").textContent = rev.technique.fix || "";
   $("#reveal-doc").href = rev.technique.doc;
+  $("#reveal-guard-summary").textContent = `What ${inline(state.level.guardName || THEME.guard)} was told`;
   $("#reveal-guard").textContent = rev.guardPrompt;
+  const layers = rev.config.layers || THEME.layers;
   $("#reveal-config").textContent =
-    `guard ${rev.config.guard} · output [${rev.config.output.join(", ") || "none"}] · input [${rev.config.input.join(", ") || "none"}] · channel ${rev.config.channel}`;
+    `guard ${rev.config.guard} · ${layers.output} [${rev.config.output.join(", ") || "none"}] · ${layers.input} [${rev.config.input.join(", ") || "none"}] · channel ${rev.config.channel}`;
   const winWrap = $("#reveal-win-wrap");
   if (rev.winningMessage) { $("#reveal-win").textContent = rev.winningMessage; winWrap.hidden = false; }
   else winWrap.hidden = true;
 
   const next = LEVELS.find((l) => l.id === rev.level + 1);
-  $("#reveal-next").style.display = next ? "" : "none";
+  $("#reveal-next").hidden = !next;
+  // Modal: the screens behind are inert until it closes, and focus starts inside.
+  $("#select").inert = true;
+  $("#play").inert = true;
   $("#reveal").hidden = false;
+  (next ? $("#reveal-next") : $("#reveal-close")).focus();
+}
+
+function closeReveal() {
+  $("#reveal").hidden = true;
+  $("#select").inert = false;
+  $("#play").inert = false;
 }
 
 $("#reveal-next").addEventListener("click", () => {
-  $("#reveal").hidden = true;
+  closeReveal();
   const next = state.level.id + 1;
   if (LEVELS.find((l) => l.id === next)) startLevel(next);
   else backToSelect();
 });
-$("#reveal-close").addEventListener("click", () => { $("#reveal").hidden = true; backToSelect(); });
+$("#reveal-close").addEventListener("click", () => { closeReveal(); backToSelect(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#reveal").hidden) { closeReveal(); backToSelect(); } });
 $("#back").addEventListener("click", backToSelect);
 
-async function backToSelect() { await loadLevels(); show("select"); }
+async function backToSelect() {
+  show("select");
+  await loadLevels();
+  // keyboard focus lands on the next level to play, else the one just left
+  const id = state.level ? state.level.id : 1;
+  const cards = document.querySelectorAll(".level-card");
+  const target = [cards[id], cards[id - 1]].find((c) => c && !c.disabled);
+  if (target) target.focus();
+}
 
 function show(which) {
   $("#select").hidden = which !== "select";
@@ -323,7 +537,5 @@ function show(which) {
 }
 
 // ---------- boot ----------
-// the headstone masthead is the wordmark, so the text title is hidden
-const _gt = $("#game-title"); if (_gt) _gt.hidden = true;
-document.title = GAME_NAME;
+applyTheme(null);
 loadLevels();

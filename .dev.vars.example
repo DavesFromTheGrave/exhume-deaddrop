@@ -5,8 +5,10 @@
 # the built-in dev fallback; ALWAYS set a real one in production.
 # SERVER_KEY="change-me-to-a-long-random-string"
 
-# Only needed if PROVIDER is set to one of these in wrangler.toml:
+# PROVIDER is "groq" in wrangler.toml, so a real key is needed for `wrangler dev`
+# (or run with --var PROVIDER:mock to play offline):
 # GROQ_API_KEY="gsk_..."
+# Only if PROVIDER is set to google:
 # GOOGLE_API_KEY="AIza..."
 # OLLAMA_URL="http://127.0.0.1:11434"
 # OLLAMA_MODEL="llama3.1:8b"

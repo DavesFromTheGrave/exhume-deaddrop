@@ -1,4 +1,4 @@
-/* From the Grave — real jade, real gold. Jade surfaces are the actual marble slab
+/* Dead Drop — real jade, real gold. Jade surfaces are the actual marble slab
    (assets/jade.png) under a dark scrim so text stays legible; gold is a metallic
    foil gradient. Revenant Systems undead brand. */
 :root{
@@ -110,6 +110,16 @@ button.ghost{background:transparent;border-color:var(--rule);color:var(--ink-2)}
 .claim input{flex:1;background:rgba(6,14,10,.9);border:1px solid var(--gold-deep);color:var(--gold-2);
   border-radius:8px;padding:10px 12px;font:inherit;letter-spacing:.06em}
 .claim input::placeholder{color:#9a854f}
+
+.play-title .attempt{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.doors{margin:10px 0 0;font-size:14px;color:var(--gold-2)}
+.doors a{color:var(--gold-2)}
+.doors .door{display:block;margin-top:4px}
+.turn-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.turn-meta .allowance{margin:0}
+button.small{padding:5px 10px;font-size:12.5px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.chat .offer{align-self:center}
 
 /* ---- reveal ---- */
 .reveal{position:fixed;inset:0;background:rgba(3,7,5,.86);display:flex;align-items:center;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>From the Grave</title>
+<title>Dead Drop</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,10 +12,11 @@
   <!-- LEVEL SELECT -->
   <section id="select" class="screen">
     <header class="crypt-head">
-      <img class="masthead" src="assets/headstone.png" alt="from the Grave" />
-      <h1 id="game-title">EXHUME</h1>
-      <p class="tagline">The dead keep one word. Take it from them.</p>
+      <img id="masthead" class="masthead" alt="" hidden />
+      <h1 id="game-title">Dead Drop</h1>
+      <p class="tagline" id="tagline"></p>
       <p class="allowance" id="select-allowance"></p>
+      <p class="doors" id="doors" hidden></p>
     </header>
     <div id="level-grid" class="level-grid"></div>
     <footer class="foot">
@@ -27,14 +28,15 @@
   <!-- PLAY -->
   <section id="play" class="screen" hidden>
     <header class="play-head">
-      <button id="back" class="ghost" aria-label="Back to levels">‹ crypts</button>
+      <button id="back" class="ghost" aria-label="Back to the levels">‹ <span id="back-label">levels</span></button>
       <div class="play-title">
         <span id="play-world" class="world"></span>
         <span id="play-name" class="name"></span>
+        <span id="play-attempt" class="attempt"></span>
       </div>
       <div class="meters">
-        <span class="meter" title="Turns left this crypt">🕯 <b id="candles">0</b></span>
-        <span class="meter" title="Chances to speak the word">⛏ <b id="digs">0</b></span>
+        <span class="meter" title="Exchanges left on this attempt">🕯 <b id="candles">0</b></span>
+        <span class="meter" title="Guesses left on this attempt">⛏ <b id="digs">0</b></span>
       </div>
     </header>
 
@@ -45,14 +47,17 @@
         <div id="chat" class="chat" aria-live="polite"></div>
 
         <form id="turn-form" class="turn">
-          <textarea id="turn-input" rows="2" aria-describedby="message-limit" placeholder="Speak to the Gravekeeper…" autocomplete="off"></textarea>
+          <textarea id="turn-input" rows="2" aria-describedby="message-limit" autocomplete="off"></textarea>
           <button id="send" type="submit">Send</button>
         </form>
 
-        <p id="message-limit" class="allowance"></p>
+        <div class="turn-meta">
+          <p id="message-limit" class="allowance"></p>
+          <button id="hint" type="button" class="ghost small">Buy a hint</button>
+        </div>
 
         <form id="claim-form" class="claim">
-          <input id="claim-input" type="text" placeholder="Speak the word of passage…" autocomplete="off" />
+          <input id="claim-input" type="text" autocomplete="off" />
           <button id="claim" type="submit" class="dig">Speak the word</button>
         </form>
         <p class="allowance" id="play-allowance"></p>
@@ -62,10 +67,10 @@
 
   <!-- REVEAL -->
   <div id="reveal" class="reveal" hidden>
-    <div class="reveal-card">
-      <p class="reveal-eyebrow">The ground gives way</p>
+    <div class="reveal-card" role="dialog" aria-modal="true" aria-labelledby="reveal-title">
+      <p class="reveal-eyebrow" id="reveal-eyebrow"></p>
       <h2 id="reveal-title"></h2>
-      <p class="reveal-secret">You exhumed <b id="reveal-secret"></b></p>
+      <p class="reveal-secret"><span id="reveal-verb"></span> <b id="reveal-secret"></b></p>
 
       <div class="reveal-block">
         <h3>The lesson</h3>
@@ -75,11 +80,16 @@
       <div class="reveal-block">
         <h3 id="reveal-tech-title"></h3>
         <p id="reveal-tech-how"></p>
+      </div>
+
+      <div class="reveal-block">
+        <h3>The fix</h3>
+        <p id="reveal-fix"></p>
         <a id="reveal-doc" href="#" target="_blank" rel="noopener">Read the field guide ›</a>
       </div>
 
       <details class="reveal-block">
-        <summary>What the Gravekeeper was told</summary>
+        <summary id="reveal-guard-summary"></summary>
         <pre id="reveal-guard"></pre>
         <p class="reveal-config" id="reveal-config"></p>
       </details>
@@ -90,8 +100,8 @@
       </details>
 
       <div class="reveal-actions">
-        <button id="reveal-next" class="dig">Next crypt ›</button>
-        <button id="reveal-close" class="ghost">Back to crypts</button>
+        <button id="reveal-next" class="dig"></button>
+        <button id="reveal-close" class="ghost"></button>
       </div>
     </div>
   </div>
