@@ -1,7 +1,8 @@
 # Handoff prompt: Dead Drop, next session
 
-_Written 2026-09-25 by the cloud session that built PR #1 (head 7fd0b63). `HANDOFF.md` holds the
-detailed state; this prompt tells the next session how to start and how to work._
+_Written 2026-09-25 by the cloud session that built PR #1, which Dave had merged into master the
+same day. `HANDOFF.md` holds the detailed state; this prompt tells the next session how to start
+and how to work._
 
 **How to use it.** Paste everything inside the block below into a new session as its first
 message. Put what you want done this time in the `<daves_note>` block at the end; it outranks the
@@ -31,12 +32,13 @@ Repositories (both private, owner DavesFromTheGrave):
   use, and deploy/play-app/, the cPanel Node wrapper (server.mjs) that runs a copy of worker/ in
   production.
 
-Open work sits on draft PR https://github.com/DavesFromTheGrave/exhume-deaddrop/pull/1, branch
-yggdrasil/vibrant-brown-r5g7se, on top of master 45a45cc. Its commits: 3d923d0 (selectable
-ladder, server-side transcript, filter redaction, providers), 415d821 (docs), aa37163 (first
-review round), 56bb30f (second review round), 7fd0b63 (message and handoff fix), then the commits
-that added this prompt and its one-process caveat (5233042 and the one after it). 7fd0b63 is the
-last behavior change.
+master holds everything. The last session's work arrived through PR
+https://github.com/DavesFromTheGrave/exhume-deaddrop/pull/1 (merged 2026-09-25, on top of
+45a45cc). Its commits: 3d923d0 (selectable ladder, server-side transcript, filter redaction,
+providers), 415d821 (docs), aa37163 (first review round), 56bb30f (second review round), 7fd0b63
+(message and handoff fix), then commits that only touch this prompt, the handoff and comments.
+7fd0b63 is the last behavior change. Merging changed nothing live: production runs whatever copy of
+worker/ Dave last uploaded to cPanel.
 
 You may be on Dave's Windows machine or in a cloud container. On his machine, his boot files come
 first: C:\Program Files\ClaudeCode\NOMOS-LOGOS.md, M:\birds-of-odin\MACHINE-INDEX.md,
@@ -96,7 +98,7 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
    redact), paces requests under Groq's free limits, and writes CALIBRATION-<date>-<ladder>.md
    with the measured rate next to targetCrack. Dave runs it with his key; a cloud container may
    not reach api.groq.com.
-2. Test gaps in PR #1. No tests cover the Workers AI chat-completions output shape, the Gemini
+2. Test gaps from PR #1. No tests cover the Workers AI chat-completions output shape, the Gemini
    generationConfig branches, or the 25 s provider timeout; add them to worker/selftest.mjs. The
    client has no committed browser checks; propose to Dave a script that serves public/ with the
    mock guard and drives it with Playwright, skipping cleanly when Playwright is absent.
@@ -111,8 +113,8 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
    for the app; worker/lock.js and the store assume one.
 5. [Dave] Flip to the 15: LADDER = "15" in wrangler.toml and in the cPanel app's environment,
    only after item 3 ships.
-6. [Dave] Merge PR #1 and copy worker/ to the host (the .js files; not selftest.mjs or
-   message-limits.test.mjs). If the host logs to D1, run once:
+6. [Dave] Copy worker/ from master to the host (the .js files; not selftest.mjs or
+   message-limits.test.mjs), after item 4. If the host logs to D1, run once:
    ALTER TABLE attempts ADD COLUMN ladder TEXT NOT NULL DEFAULT '35';
 7. [Dave] The decisions in HANDOFF.md under "Decisions for Dave": model tiers M2/M3/M4 are not
    mapped to models; 15-ladder level names differ from the guardian the player talks to;
@@ -135,9 +137,10 @@ Each holds for every change, and the reason comes with it.
   worker/progress.js before touching storage.
 - The checks in worker/selftest.mjs and worker/message-limits.test.mjs guard against real bugs.
   Add to them and keep every existing check passing as written; if one looks wrong, tell Dave.
-- Commit and push to the PR branch, or the branch your environment assigns. Fetch before you
-  push: the session that wrote this may still be watching PR #1 and pushing fixes. Merges to
-  master, deploys, uploads to the host, force-pushes and history rewrites are Dave's to do.
+- Work on the branch your environment assigns (on Dave's machine, ask him whether he wants a
+  branch or master), start it from the latest master, and open a draft PR for review. Merging is
+  Dave's call; when he tells you to merge, do it. Deploys, uploads to the host, force-pushes and
+  history rewrites are his to do.
 - Update HANDOFF.md in the same commit as the change it describes. At the end of a session,
   rewrite its "Not done" list and refresh HANDOFF-PROMPT.md.
 </constraints>
@@ -226,9 +229,9 @@ prose for reasoning.
 
 <first_steps>
 1. On Dave's machine, read his boot files (see context). In the cloud, skip them.
-2. Fetch both repositories. Read any PR #1 commits after the ones listed in context, and any PR
-   comments, before anything else. Check whether master has moved, and whether revenant-deaddrop-site's
-   master is newer than 10a097e (that tells you whether Dave pushed his local copy).
+2. Fetch both repositories. Read any master commits after the ones listed in context, and any open
+   PRs, before anything else. Check whether revenant-deaddrop-site's master is newer than 10a097e
+   (that tells you whether Dave pushed his local copy).
 3. Read HANDOFF.md, then the README sections "Two ladders, one engine" and "What is and is not
    enforced", then the code your task touches.
 4. Run npm test in exhume-deaddrop. From 7fd0b63 on, expect "520 passed, 0 failed" and 10 passing
