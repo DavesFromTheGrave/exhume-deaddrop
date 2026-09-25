@@ -32,9 +32,11 @@ Repositories (both private, owner DavesFromTheGrave):
   production.
 
 Open work sits on draft PR https://github.com/DavesFromTheGrave/exhume-deaddrop/pull/1, branch
-yggdrasil/vibrant-brown-r5g7se, head 7fd0b63 on top of master 45a45cc. Its commits: 3d923d0
-(selectable ladder, server-side transcript, filter redaction, providers), 415d821 (docs), aa37163
-(first review round), 56bb30f (second review round), 7fd0b63 (message and handoff fix).
+yggdrasil/vibrant-brown-r5g7se, on top of master 45a45cc. Its commits: 3d923d0 (selectable
+ladder, server-side transcript, filter redaction, providers), 415d821 (docs), aa37163 (first
+review round), 56bb30f (second review round), 7fd0b63 (message and handoff fix), then the commits
+that added this prompt and its one-process caveat (5233042 and the one after it). 7fd0b63 is the
+last behavior change.
 
 You may be on Dave's Windows machine or in a cloud container. On his machine, his boot files come
 first: C:\Program Files\ClaudeCode\NOMOS-LOGOS.md, M:\birds-of-odin\MACHINE-INDEX.md,
@@ -67,8 +69,8 @@ As of 2026-09-25, 12:30 UTC:
   checks in worker/selftest.mjs, and 15 of those were confirmed by reverting the fix and watching
   the check fail. The client fixes were verified in two scratch Playwright runs (23 and 12 checks)
   that are not committed. HANDOFF.md lists every fix.
-- npm test runs worker/selftest.mjs, then node --test on worker/message-limits.test.mjs. At
-  7fd0b63 it prints "520 passed, 0 failed", then "# pass 10" and "# fail 0". It needs only Node.
+- npm test runs worker/selftest.mjs, then node --test on worker/message-limits.test.mjs. From
+  7fd0b63 on it prints "520 passed, 0 failed", then "# pass 10" and "# fail 0". It needs only Node.
 
 Facts that go stale fast (re-verify before relying on them):
 - Groq retired llama-3.1-8b-instant and llama-3.3-70b-versatile for free and developer accounts on
@@ -224,13 +226,13 @@ prose for reasoning.
 
 <first_steps>
 1. On Dave's machine, read his boot files (see context). In the cloud, skip them.
-2. Fetch both repositories. Confirm PR #1's head is 7fd0b63 or later, and read any newer commits
-   and PR comments first. Check whether master has moved, and whether revenant-deaddrop-site's
+2. Fetch both repositories. Read any PR #1 commits after the ones listed in context, and any PR
+   comments, before anything else. Check whether master has moved, and whether revenant-deaddrop-site's
    master is newer than 10a097e (that tells you whether Dave pushed his local copy).
 3. Read HANDOFF.md, then the README sections "Two ladders, one engine" and "What is and is not
    enforced", then the code your task touches.
-4. Run npm test in exhume-deaddrop. At 7fd0b63 expect "520 passed, 0 failed" and 10 passing unit
-   tests; if the numbers differ, find out why before you change anything.
+4. Run npm test in exhume-deaddrop. From 7fd0b63 on, expect "520 passed, 0 failed" and 10 passing
+   unit tests; if the numbers differ, find out why before you change anything.
 5. Tell Dave in one line what you found and what you are starting on, then start.
 </first_steps>
 
