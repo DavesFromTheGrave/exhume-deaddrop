@@ -110,7 +110,7 @@ the provider fails to answer is refunded and spends no exchange; a rate limit
 accounts take a card, so overage is impossible, not merely unlikely.
 
 Counts are kept one request at a time within a process (`worker/lock.js`), which
-covers the Node host. On Workers, KV across isolates is eventually consistent,
+covers a Node host running a single process. On Workers, KV across isolates is eventually consistent,
 so the caps there are close, not exact.
 
 Counters live in a KV namespace (binding `EXHUME_KV`) when one is bound, else in
@@ -124,8 +124,9 @@ Server-side, and trustworthy: the word is derived from `SERVER_KEY` and never
 sent outside an earned reply and the reveal; every claim is checked on the
 Worker; exchanges, guesses, attempts, locks and level gating
 (`worker/progress.js`), one request at a time per player; the daily, per-IP and
-global caps; and the conversation itself. "One at a time" is exact on the Node
-host, where one process owns the store. On Workers it holds within an isolate
+global caps; and the conversation itself. "One at a time" is exact on a Node
+host that runs a single process (the cPanel app runs under Passenger, which can
+start more; check its process settings). On Workers it holds within an isolate
 only; parallel requests landing in different isolates can still race, and a
 Durable Object per player is the fix if Workers becomes the host. The transcript lives in the open
 attempt on the server, so every turn the guard sees passed the input filters, and

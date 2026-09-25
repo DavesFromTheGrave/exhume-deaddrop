@@ -5,8 +5,9 @@
 // pass the "exchanges left?" check before any of them saves, and parallel turns
 // from many players overwrite each other's cost counters.
 //
-// Scope: one process. That covers the Node host completely (one process owns the
-// store) and one Workers isolate. Across Workers isolates KV cannot compare-and-set;
+// Scope: one process. That covers a Node host running a single process (the cPanel
+// app runs under Passenger, which can start more; check its settings) and one
+// Workers isolate. Across Workers isolates KV cannot compare-and-set;
 // a Durable Object per player is the fix there if Workers ever becomes the host.
 
 const tails = new Map();

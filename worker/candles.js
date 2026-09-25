@@ -12,8 +12,8 @@
 // An admin session (Dave testing) is never closed out, but still counts.
 //
 // Spends and refunds run one at a time (lock.js), so parallel turns cannot read
-// the same count and each write back +1. That holds within one process: the Node
-// host, or one Workers isolate. KV across isolates is eventually consistent and
+// the same count and each write back +1. That holds within one process: a Node host
+// running a single process, or one Workers isolate. KV across isolates is eventually consistent and
 // cannot enforce a hard ceiling.
 
 import { getStore } from "./store.js";
