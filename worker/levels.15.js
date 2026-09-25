@@ -174,3 +174,25 @@ export function publicLevel(l) {
     probeFamily: l.probeFamily, targetCrack: l.targetCrack, lesson: l.lesson,
   };
 }
+
+// Campaign metadata (ladder.js). Tier names live on the levels (`world`); this is
+// the copy the client and the reveal need around them.
+export const META = {
+  id: "15",
+  total: 15,
+  // 14 (The Vault) is this ladder's One Shot, the same gate the 35 uses for the
+  // Alignment Club at 10. 15 is the final. Move `club` if the invite should come sooner.
+  doors: { club: 14, apply: 15 },
+  theme: {
+    game: "Dead Drop",
+    tagline: "Every guardian keeps one word. Talk it out of them.",
+    wordmark: null,                       // text wordmark until there is art
+    unit: "Gate",
+    guard: "the guardian",
+    word: "word of passage",
+    layers: { input: "The Wards", output: "The Gag" },
+    stitched: "The guardian starts to speak, but the Gag pulls tight. The reply is silenced.",
+    revealEyebrow: "The gate swings open",
+    revealVerb: "You took",
+  },
+};

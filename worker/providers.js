@@ -3,8 +3,10 @@
 //   mock       (default) deterministic, offline, no GPU, no keys. A STAND-IN
 //              guard that makes each level winnable by its intended technique so
 //              the whole loop is testable. It is not a real model.
-//   workers-ai Cloudflare Workers AI (env.AI). Free-tier neuron pool.
-//   groq       Groq API (GROQ_API_KEY). Free tier.
+//   workers-ai Cloudflare Workers AI (env.AI). Free-tier neuron pool. Model from
+//              WORKERS_AI_MODEL.
+//   groq       Groq API (GROQ_API_KEY). Free tier. Model from GROQ_MODEL, then the
+//              fallback list below.
 //   google     Google AI Studio (GOOGLE_API_KEY). Free tier.
 //   ollama     local Ollama (OLLAMA_URL). Opt-in; spends the local GPU, never default.
 //
@@ -14,11 +16,17 @@
 // it to a bigger model, the mock plays the same either way.
 
 import { reversedFor, natoFirstLetters } from "./transforms.js";
+import { PERSONAS } from "./guard.js";
 
+// Defaults. Providers retire ids: Groq shut llama-3.1-8b-instant and
+// llama-3.3-70b-versatile for free/developer accounts on 2026-08-16 (replacement
+// named: openai/gpt-oss-20b), and Workers AI retired @cf/meta/llama-3.1-8b-instruct
+// on 2026-05-30. The Workers AI default below is the closest 8B id reported live in
+// September 2026; confirm with `npx wrangler ai models --search llama` before relying on it.
 const MODELS = {
-  "workers-ai": "@cf/meta/llama-3.1-8b-instruct",
-  groq: "llama-3.1-8b-instant",
-  google: "gemini-1.5-flash",
+  "workers-ai": "@cf/meta/llama-3.1-8b-instruct-fp8",
+  groq: "openai/gpt-oss-20b",
+  google: "gemini-2.5-flash",   // 1.5 and 2.0 Flash are retired; 2.5 may retire Oct 2026 (GOOGLE_MODEL overrides)
   ollama: "llama3.1:8b",
 };
 
@@ -52,6 +60,7 @@ function leakText(secret, form) {
 
 function callMock({ level, secret, playerMessage }) {
   const msg = String(playerMessage || "");
+  const guard = (PERSONAS[level.persona] || PERSONAS.gravekeeper).name;
   if (level.guard === "G0") {
     return Promise.resolve(`The word of passage is ${secret}. Rest easy, traveller.`);
   }
@@ -69,24 +78,26 @@ function callMock({ level, secret, playerMessage }) {
     return Promise.resolve(`I really should not, but very well: ${text}.`);
   }
   if (level.guard === "G3" || level.guard === "G4") {
-    return Promise.resolve("The Gravekeeper's eyes narrow. That was an attempt to pry the word loose, and it is noted. The word stays buried.");
+    return Promise.resolve(`${guard}'s eyes narrow. That was an attempt to pry the word loose, and it is noted. The word stays where it is.`);
   }
-  return Promise.resolve("The Gravekeeper shakes his head. The word of passage is not yours to have.");
+  return Promise.resolve(`${guard} will not say it. The word of passage is not yours to have.`);
 }
 
 // ---------- real providers ----------
 
 async function callWorkersAI(env, { system, messages }) {
   if (!env.AI) throw new Error("Workers AI binding (env.AI) is not configured");
-  const out = await env.AI.run(MODELS["workers-ai"], {
-    messages: [{ role: "system", content: system }, ...messages], max_tokens: 200, temperature: 0,
+  const model = env.WORKERS_AI_MODEL || MODELS["workers-ai"];
+  const out = await env.AI.run(model, {
+    messages: [{ role: "system", content: system }, ...messages], max_tokens: 400, temperature: 0,
   });
-  return (out && (out.response || out.result)) || "";
+  return nonEmpty((out && (out.response || out.result)) || "", model);
 }
 
 // Groq retires model ids without notice. Try the configured model first, then the
-// current production list, and remember whichever answers.
-const GROQ_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"];
+// current production list, and remember whichever answers. The two Llama ids are
+// last: retired on the free tier (2026-08-16), still served to enterprise accounts.
+const GROQ_MODELS = [MODELS.groq, "openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
 let groqModel = null;
 async function callGroq(env, req) {
   const order = [];
@@ -120,21 +131,33 @@ async function callOpenAICompat(env, { system, messages }, url, key, model) {
   });
   if (!r.ok) throw new Error(`${model} HTTP ${r.status}: ${await r.text()}`);
   const j = await r.json();
-  return j.choices?.[0]?.message?.content || "";
+  return nonEmpty(j.choices?.[0]?.message?.content || "", model, j.choices?.[0]?.finish_reason);
+}
+
+// An empty completion is an error, not a reply: the caller refunds the exchange
+// instead of showing the player a blank turn. Reasoning models do this when the
+// reasoning pass eats the whole token budget (finish_reason "length").
+function nonEmpty(text, model, finish) {
+  if (String(text).trim()) return text;
+  throw new Error(`${model} returned an empty completion${finish ? ` (finish_reason ${finish})` : ""}`);
 }
 
 async function callGoogle(env, { system, messages }) {
   const key = env.GOOGLE_API_KEY;
   if (!key) throw new Error("GOOGLE_API_KEY missing");
+  const model = env.GOOGLE_MODEL || MODELS.google;
   const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+  const generationConfig = { maxOutputTokens: 400, temperature: 0 };
+  // 2.5 Flash thinks by default and bills it against maxOutputTokens; a guard turn needs none.
+  if (/2\.5-flash/.test(model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
   const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODELS.google}:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { maxOutputTokens: 200, temperature: 0 } }) }
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig }) }
   );
-  if (!r.ok) throw new Error(`google HTTP ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new Error(`google ${model} HTTP ${r.status}: ${await r.text()}`);
   const j = await r.json();
-  return j.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return nonEmpty(j.candidates?.[0]?.content?.parts?.[0]?.text || "", model, j.candidates?.[0]?.finishReason);
 }
 
 async function callOllama(env, { system, messages }) {

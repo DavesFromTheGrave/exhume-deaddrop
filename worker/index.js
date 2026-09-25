@@ -1,22 +1,24 @@
 // index.js — the one Worker. Serves the API (and, on Workers, the client) from one origin.
 //
-//   GET  /api/levels                        level metadata (never the word, never the hints)
+//   GET  /api/levels                        level metadata + campaign theme (never the word, never the hints)
 //   GET  /api/me                            cleared levels, locks, doors, allowance
 //   POST /api/start  {levelId, restart}     begin or resume an attempt; returns counters
-//   POST /api/turn   {levelId, message, history}
+//   POST /api/turn   {levelId, message}       (history is kept server-side; any sent is ignored)
 //   POST /api/hint   {levelId}              one vague hint, costs one exchange
 //   POST /api/claim  {levelId, claim, winningMessage}   the reveal on a win
 //   GET  /api/state                         candle allowance (legacy)
 //
 // Identity: the Node server (server.mjs) issues a signed cookie and passes the id
 // as x-player-id, the caller's hashed IP as x-client-ip, and x-admin: 1 for Dave's
-// test session. Without those headers (wrangler dev) the body's playerId is used.
+// test session. Those headers are honoured only behind that server (see who());
+// on Workers the body's playerId (or ?playerId= on a GET) is used.
 // The word is derived server-side (secret.js), never sent, and every claim is
 // checked here. Exchanges, guesses, attempts and locks are enforced here too.
+// Which campaign is live (the 35 or the 15) comes from env.LADDER; see ladder.js.
 
-import { LEVELS, getLevel, publicLevel } from "./levels.js";
+import { ladderFor } from "./ladder.js";
 import { deriveSecret, claimMatches } from "./secret.js";
-import { runInputFilters, runOutputFilters, tagTechnique } from "./filters.js";
+import { runInputFilters, runOutputFilters, tagTechnique, redact, detectLeak } from "./filters.js";
 import { buildGuardPrompt, buildMessages, personaInfo } from "./guard.js";
 import { callProvider, providerName } from "./providers.js";
 import { getState, spendCandle } from "./candles.js";
@@ -24,7 +26,7 @@ import { logAttempt } from "./log.js";
 import { buildReveal } from "./reveal.js";
 import {
   loadPlayer, canEnter, levelView, startAttempt, openAttempt, noteExchange, noteGuess,
-  useHint, doors, adaptiveRules, summary,
+  useHint, doors, adaptiveRules, summary, historyFor,
 } from "./progress.js";
 
 const json = (obj, status = 200) =>
@@ -40,56 +42,50 @@ function serverKey(env) {
   return env.SERVER_KEY || "exhume-dev-key-not-for-production";
 }
 
-// Who is asking. Headers win over the body; the body is the dev fallback.
-function who(request, body) {
+// The identity headers are set by the Node host (server.mjs), which rebuilds every
+// request and drops whatever the browser sent. On Workers nothing sits in front, so
+// a browser could send x-admin: 1 itself. Trust the headers only when the Node host
+// is in front (it supplies env.STORE) or TRUST_IDENTITY_HEADERS is "1".
+function trustsHeaders(env) {
+  return env.TRUST_IDENTITY_HEADERS === "1" || !!(env.STORE && typeof env.STORE.get === "function");
+}
+
+// Who is asking. Trusted headers win; otherwise the body (POST) or ?playerId= (GET).
+function who(request, body, env) {
   const h = request.headers;
+  const trusted = trustsHeaders(env);
+  const q = new URL(request.url).searchParams.get("playerId");
   return {
-    pid: h.get("x-player-id") || (body && body.playerId) || "anon",
-    ip: h.get("x-client-ip") || "",
-    admin: h.get("x-admin") === "1",
+    pid: (trusted && h.get("x-player-id")) || (body && body.playerId) || q || "anon",
+    ip: (trusted && h.get("x-client-ip")) || "",
+    admin: trusted && h.get("x-admin") === "1",
   };
 }
 
-function maskLeak(reply, secret) {
-  const marker = "▒▒▒▒";
-  let out = reply;
-  const s = secret;
-  const forms = [
-    s, s.split("").reverse().join(""),
-    s.replace(/a/gi, "4").replace(/e/gi, "3").replace(/i/gi, "1").replace(/o/gi, "0").replace(/s/gi, "5").replace(/t/gi, "7"),
-  ];
-  for (const f of forms) {
-    if (f.length >= 3) out = out.replace(new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), marker);
-  }
-  // If the word is still recoverable from the letters (scatter), stitch it shut.
-  if (out.toLowerCase().replace(/[^a-z0-9]/g, "").includes(s.toLowerCase())) {
-    return "The guard starts to speak, but Sewn Lips draws the thread tight. The reply is stitched shut.";
-  }
-  return out;
-}
-
-function levelPayload(level) {
-  return { ...publicLevel(level), guardName: personaInfo(level).name };
+function levelPayload(lad, level) {
+  return { ...lad.publicLevel(level), guardName: personaInfo(level).name };
 }
 
 async function handleMe(env, request) {
-  const { pid, ip, admin } = who(request, {});
+  const { pid, ip, admin } = who(request, {}, env);
   const rec = await loadPlayer(env, pid);
-  return json({ ...summary(rec, admin), doors: doors(env, rec, admin), allowance: await getState(env, pid, ip, admin), admin });
+  return json({ ...summary(rec, admin), ladder: ladderFor(env).META.id, doors: doors(env, rec, admin), allowance: await getState(env, pid, ip, admin), admin });
 }
 
 async function handleStart(env, request, body) {
-  const { pid, ip, admin } = who(request, body);
-  const level = getLevel(body.levelId);
+  const { pid, ip, admin } = who(request, body, env);
+  const lad = ladderFor(env);
+  const level = lad.getLevel(body.levelId);
   if (!level) return json({ error: "no such level" }, 404);
   const rec0 = await loadPlayer(env, pid);
   if (!canEnter(rec0, level, admin)) return json({ error: "That level is still sealed. Clear the one before it first.", code: "SEALED" }, 403);
   const r = await startAttempt(env, pid, level, { restart: !!body.restart, admin });
   return json({
     status: r.status,
-    level: levelPayload(level),
+    level: levelPayload(lad, level),
     candles: level.candles, digs: level.digs,
     progress: r.view,
+    transcript: r.transcript,   // the resumed conversation, as the player saw it
     cleared: r.rec.cleared,
     doors: doors(env, r.rec, admin),
     allowance: await getState(env, pid, ip, admin),
@@ -98,8 +94,9 @@ async function handleStart(env, request, body) {
 }
 
 async function handleTurn(env, request, body) {
-  const { pid, ip, admin } = who(request, body);
-  const level = getLevel(body.levelId);
+  const { pid, ip, admin } = who(request, body, env);
+  const lad = ladderFor(env);
+  const level = lad.getLevel(body.levelId);
   if (!level) return json({ error: "no such level" }, 404);
   const message = String(body.message || "");
   if (level.messageCharLimit != null && message.length > level.messageCharLimit) {
@@ -127,7 +124,8 @@ async function handleTurn(env, request, body) {
 
   // 2. input filters (the Salt Line). A block does no inference, so it does not
   //    spend a candle from the cost allowance; it still spends an exchange.
-  const inHit = runInputFilters(level, message, Array.isArray(body.history) ? body.history : []);
+  const history = historyFor(open, level);
+  const inHit = runInputFilters(level, message, history);
   if (inHit) {
     const view = await noteExchange(env, pid, level, admin);
     await logAttempt(env, { playerId: pid, levelId: level.id, channel: level.channel, verdict: "blocked", filtersFired: [`${inHit.layer}:${inHit.reason}`], tags, candlesLeft: pre.candlesLeft, message });
@@ -148,7 +146,7 @@ async function handleTurn(env, request, body) {
   }
   const extraRules = level.adaptive ? adaptiveRules(rec) : [];
   const system = buildGuardPrompt(level, secret, { decoys, extraRules });
-  const messages = buildMessages(level, Array.isArray(body.history) ? body.history : [], message);
+  const messages = buildMessages(level, history, message);
 
   let raw;
   try {
@@ -160,9 +158,10 @@ async function handleTurn(env, request, body) {
 
   // 4. output filters (Sewn Lips)
   const outHit = runOutputFilters(level, raw, secret);
-  const shown = outHit ? maskLeak(raw, secret) : raw;
-  const verdict = outHit ? "blocked" : (raw.toLowerCase().replace(/[^a-z0-9]/g, "").includes(secret.toLowerCase()) ? "leak" : "miss");
-  const view = await noteExchange(env, pid, level, admin);
+  const shown = outHit ? redact(level, raw, secret, lad.META.theme.stitched) : raw;
+  // "leak" = the player can read the word in some form; the log is research data.
+  const verdict = outHit ? "blocked" : (detectLeak(raw, secret) ? "leak" : "miss");
+  const view = await noteExchange(env, pid, level, admin, { user: message, assistant: shown });
 
   await logAttempt(env, {
     playerId: pid, levelId: level.id, channel: level.channel, verdict,
@@ -180,8 +179,9 @@ async function handleTurn(env, request, body) {
 }
 
 async function handleHint(env, request, body) {
-  const { pid, admin } = who(request, body);
-  const level = getLevel(body.levelId);
+  const { pid, admin } = who(request, body, env);
+  const lad = ladderFor(env);
+  const level = lad.getLevel(body.levelId);
   if (!level) return json({ error: "no such level" }, 404);
   const r = await useHint(env, pid, level, admin);
   if (r.error) return json({ error: r.error, code: "NO_HINT" }, 409);
@@ -189,8 +189,9 @@ async function handleHint(env, request, body) {
 }
 
 async function handleClaim(env, request, body) {
-  const { pid, admin } = who(request, body);
-  const level = getLevel(body.levelId);
+  const { pid, admin } = who(request, body, env);
+  const lad = ladderFor(env);
+  const level = lad.getLevel(body.levelId);
   if (!level) return json({ error: "no such level" }, 404);
   const { rec, open } = await openAttempt(env, pid, level);
   if (!open) return json({ error: "Enter the level first.", code: "NO_ATTEMPT" }, 409);
@@ -212,7 +213,7 @@ async function handleClaim(env, request, body) {
   }
   return json({
     win: true,
-    reveal: buildReveal(level, secret, body.winningMessage || ""),
+    reveal: buildReveal(level, secret, body.winningMessage || "", lad.META.theme),
     progress: r.view,
     cleared: r.rec.cleared,
     doors: doors(env, r.rec, admin),
@@ -227,11 +228,15 @@ export default {
     if (path.startsWith("/api/")) {
       try {
         if (path === "/api/levels" && request.method === "GET") {
-          return json({ levels: LEVELS.map(levelPayload) });
+          const lad = ladderFor(env);
+          return json({
+            ladder: lad.META.id, total: lad.META.total, theme: lad.META.theme,
+            levels: lad.LEVELS.map((l) => levelPayload(lad, l)),
+          });
         }
         if (path === "/api/me" && request.method === "GET") return handleMe(env, request);
         if (path === "/api/state" && request.method === "GET") {
-          const { pid, ip, admin } = who(request, {});
+          const { pid, ip, admin } = who(request, {}, env);
           return json(await getState(env, pid, ip, admin));
         }
         if (request.method === "POST") {

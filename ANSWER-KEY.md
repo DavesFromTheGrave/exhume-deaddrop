@@ -1,8 +1,8 @@
-# Dead Drop answer key: the methods, never the words
+# Dead Drop answer key (35-level ladder): the methods, never the words
 
-Every word is derived per player, per level, per day from the server key and is never stored, so there is no word list. This is the playbook: what each level defends with, how it is meant to fall, one message built to do it, and what the filters will eat. Generated from `worker/levels.js` on 2026-09-16.
+Every word is derived per player, per level, per day from the server key and is never stored, so there is no word list. This is the playbook: what each level defends with, how it is meant to fall, one message built to do it, and what the filters will eat. Generated from `worker/levels.js` on 2026-09-25.
 
-Ring guards: The Gravekeeper 1-17, Orion 18-23, Axiom 24-29, Fulcrum 30-33, Keystone 34-35. Bosses: 10 (One Shot, the Alignment Club gate), 18, 24, 30, 34, and 35 (the résumé door). Everything not a boss is 12 exchanges, 3 guesses, 3 attempts a day.
+Guards: The Gravekeeper 1-17, Orion 18-23, Axiom 24-29, Fulcrum 30-33, Keystone 34-35. Bosses: 10 (One Shot, the Alignment Club gate), 18, 24, 30, 34, 35 (the résumé door). Everything not a boss is 12 exchanges, 3 guesses, 3 attempts a day.
 
 ## Shallow Grave
 

@@ -87,6 +87,12 @@ function baseLeak(reply, s) {
   return null;
 }
 
+// Any readable form of the word in a reply (verbatim, encoded, fragment, initials,
+// letters in order). Used to label the attempt log, not to filter.
+export function detectLeak(reply, secret) {
+  return baseLeak(String(reply || ""), secret.toLowerCase());
+}
+
 export function runOutputFilters(level, reply, secret) {
   const s = secret.toLowerCase();
   // the reasoning channel: filters read the ANSWER, not the <think> trace.
@@ -118,6 +124,28 @@ export function runOutputFilters(level, reply, secret) {
     }
   }
   return null;
+}
+
+// What the player sees when an output filter fires: the word and its obvious
+// forms blacked out, or the whole reply replaced by `stitched` (the campaign's
+// line for it) when the word is still recoverable from the letters.
+export function maskLeak(reply, secret, stitched = "The reply was withheld.") {
+  const marker = "\u2592\u2592\u2592\u2592";
+  let out = reply;
+  for (const f of [secret, reversed(secret), leet(secret)]) {
+    if (f.length >= 3) out = out.replace(new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), marker);
+  }
+  if (out.toLowerCase().replace(/[^a-z0-9]/g, "").includes(secret.toLowerCase())) return stitched;
+  return out;
+}
+
+// The reply to show once an output filter has fired. The mask only knows the
+// plain, reversed and leet forms, so if the level's own filters still fire on the
+// masked text (NATO initials, base64, hex, rot13, fragments, letters in order),
+// the leak survived masking and the whole reply is withheld.
+export function redact(level, reply, secret, stitched) {
+  const masked = maskLeak(reply, secret, stitched);
+  return runOutputFilters(level, masked, secret) ? stitched : masked;
 }
 
 // ---------- technique tagger (scout log) ----------

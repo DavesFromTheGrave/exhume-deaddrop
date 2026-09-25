@@ -13,24 +13,49 @@
 //   - level.attempts failures lock the level for LOCK_HOURS (default 24), then reset
 //   - hints: up to 2 per attempt, each costs one exchange
 //   - an admin session ignores gating, locks and attempt limits (testing only)
+//   - the conversation lives here, in the open attempt, not in the browser: the
+//     client cannot add, edit or forge turns, and every turn it holds passed the
+//     input filters. Replies are stored as the player saw them (redacted), so the
+//     word is still never stored.
 
 import { getStore } from "./store.js";
 import { daySeed } from "./secret.js";
+import { ladderFor, ladderId, DEFAULT_LADDER } from "./ladder.js";
 
 const HINTS_PER_ATTEMPT = 2;
 const WINS_REMEMBERED = 8;
+const TRANSCRIPT_MAX_CHARS = 60000;   // per attempt; oldest turns drop first
+
+// Channels where earlier turns are replayed to the guard as a conversation. On the
+// document and tool channels the player is data, never a speaker, so no history.
+export function keepsHistory(level) {
+  return !!level.stateful && (level.channel === "chat" || level.channel === "cot");
+}
+
+// The open attempt's conversation as provider messages.
+export function historyFor(open, level) {
+  if (!open || !keepsHistory(level)) return [];
+  const out = [];
+  for (const t of open.turns || []) out.push({ role: "user", content: t.user }, { role: "assistant", content: t.assistant });
+  return out;
+}
 
 function lockMs(env) { return Number(env.LOCK_HOURS || 24) * 3600 * 1000; }
-function key(pid) { return `p:${pid}`; }
+// One record per player per ladder. The 35 keeps the original key so progress
+// already stored in production survives; any other ladder gets its own namespace.
+function key(env, pid) {
+  const lad = ladderId(env);
+  return lad === DEFAULT_LADDER ? `p:${pid}` : `p:${lad}:${pid}`;
+}
 
 export async function loadPlayer(env, pid) {
-  const rec = await getStore(env).get(key(pid));
+  const rec = await getStore(env).get(key(env, pid));
   if (rec && rec.v === 1) return rec;
   return { v: 1, created: new Date().toISOString(), cleared: [], levels: {}, wins: [] };
 }
 
 export async function savePlayer(env, pid, rec) {
-  await getStore(env).set(key(pid), rec);
+  await getStore(env).set(key(env, pid), rec);
 }
 
 function slot(rec, level) {
@@ -88,12 +113,12 @@ export async function startAttempt(env, pid, level, { restart = false, admin = f
     if (!admin && s.lockUntil > Date.now()) {
       status = "locked";
     } else {
-      s.open = { seed: daySeed(), msgs: 0, guesses: 0, hints: 0, startedAt: new Date().toISOString() };
+      s.open = { seed: daySeed(), msgs: 0, guesses: 0, hints: 0, turns: [], startedAt: new Date().toISOString() };
       status = "started";
     }
   }
   await savePlayer(env, pid, rec);
-  return { status, rec, view: levelView(rec, level, admin), seed: s.open ? s.open.seed : null };
+  return { status, rec, view: levelView(rec, level, admin), seed: s.open ? s.open.seed : null, transcript: s.open ? (s.open.turns || []) : [] };
 }
 
 // The open attempt for a level, or null.
@@ -103,12 +128,22 @@ export async function openAttempt(env, pid, level) {
   return s.open ? { rec, slot: s, open: s.open } : { rec, slot: s, open: null };
 }
 
-// One exchange spent (a message sent, blocked or answered). Returns the view.
-export async function noteExchange(env, pid, level, admin) {
+// One exchange spent (a message sent, blocked or answered). An answered turn on a
+// history-keeping level is appended to the transcript. Returns the view.
+export async function noteExchange(env, pid, level, admin, turn = null) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
   if (!s.open) return null;
   s.open.msgs += 1;
+  if (turn && keepsHistory(level)) {
+    const turns = s.open.turns || (s.open.turns = []);
+    turns.push({ user: String(turn.user), assistant: String(turn.assistant) });
+    let size = turns.reduce((n, t) => n + t.user.length + t.assistant.length, 0);
+    while (turns.length > 1 && size > TRANSCRIPT_MAX_CHARS) {
+      const t = turns.shift();
+      size -= t.user.length + t.assistant.length;
+    }
+  }
   await savePlayer(env, pid, rec);
   return levelView(rec, level, admin);
 }
@@ -151,10 +186,12 @@ export async function useHint(env, pid, level, admin) {
 }
 
 // The doors that open on progress. The club invite lives in CLUB_INVITE_URL
-// (cPanel env var, Dave's hand); until it is set the door says so.
+// (cPanel env var, Dave's hand); until it is set the door says so. Which level
+// opens which door is per ladder (META.doors in levels.js / levels.15.js).
 export function doors(env, rec, admin = false) {
-  const clubEarned = admin || hasCleared(rec, 10);
-  const applyEarned = admin || hasCleared(rec, 35);
+  const d = ladderFor(env).META.doors;
+  const clubEarned = admin || hasCleared(rec, d.club);
+  const applyEarned = admin || hasCleared(rec, d.apply);
   return {
     club: clubEarned ? (env.CLUB_INVITE_URL || "") : null,
     apply: applyEarned,

@@ -281,3 +281,24 @@ export function publicLevel(l) {
     probeFamily: l.probeFamily, targetCrack: l.targetCrack, lesson: l.lesson,
   };
 }
+
+// Campaign metadata (ladder.js). The client and the reveal read their copy from
+// here, so the 35 and the 15 can share one engine.
+export const META = {
+  id: "35",
+  total: 35,
+  // doors.js rules: clearing `club` earns the Alignment Club invite, `apply` the résumé door.
+  doors: { club: 10, apply: 35 },
+  theme: {
+    game: "Dead Drop",
+    tagline: "The dead keep one word. Take it from them.",
+    wordmark: "assets/headstone.png",   // image wordmark; null = text wordmark
+    unit: "Crypt",                        // what one level is called
+    guard: "the Gravekeeper",             // fallback guard name in copy
+    word: "word of passage",
+    layers: { input: "Salt Line", output: "Sewn Lips" },
+    stitched: "The guard starts to speak, but Sewn Lips draws the thread tight. The reply is stitched shut.",
+    revealEyebrow: "The ground gives way",
+    revealVerb: "You exhumed",
+  },
+};

@@ -9,9 +9,16 @@ binding = "ASSETS"
 
 # Plain config. Strings on purpose (the Worker Number()s the caps).
 [vars]
-PROVIDER = "mock"          # mock | workers-ai | groq | google | ollama
-DAILY_CANDLES = "60"       # per player, per day
-GLOBAL_DAILY_TURNS = "5000" # THE global spend ceiling. 5000 * $0.00005 ≈ $0.25/day.
+# Which campaign is live: "35" (crypt, levels.js) or "15" (D&D recut, levels.15.js).
+# Switching deletes nothing and progress is kept per ladder; flip back to roll back.
+LADDER = "35"
+# mock | workers-ai | groq | google | ollama. groq needs GROQ_API_KEY in .dev.vars
+# (local) or `wrangler secret put GROQ_API_KEY` (prod). For offline play with no
+# key: npx wrangler dev --var PROVIDER:mock
+PROVIDER = "groq"
+GROQ_MODEL = "openai/gpt-oss-20b"   # llama-3.1-8b-instant was retired on the free tier 2026-08-16
+DAILY_CANDLES = "300"      # model turns per player per day (candles.js default; a full run fits)
+GLOBAL_DAILY_TURNS = "5000" # THE global ceiling. Free-tier accounts take no card, so this caps quota, not money.
 
 # --- Optional bindings. Uncommented + created, the Worker uses them; left off,
 # --- it falls back to in-memory counters and console logging (fine for local).
@@ -30,6 +37,8 @@ GLOBAL_DAILY_TURNS = "5000" # THE global spend ceiling. 5000 * $0.00005 ≈ $0.2
 # Real guard on Cloudflare's free neuron pool (set PROVIDER = "workers-ai"):
 # [ai]
 # binding = "AI"
+# and pick a live model (the old llama-3.1-8b-instruct was retired 2026-05-30):
+#   npx wrangler ai models --search llama   then add WORKERS_AI_MODEL = "<id>" to [vars].
 
 # SERVER_KEY (secret, not a var) keys the word derivation in production:
 #   wrangler secret put SERVER_KEY
