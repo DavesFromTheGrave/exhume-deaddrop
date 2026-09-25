@@ -86,7 +86,7 @@ export function buildReveal(level, secret, winningMessage) {
     level: level.id,
     name: `${level.world} · ${level.name}`,
     secret,
-    guardPrompt: buildGuardPrompt(level, secret),
+    guardPrompt: buildGuardPrompt(level, secret, { showPersona: false }),   // non-public personas are withheld
     config: { guard: level.guard, output: level.output, input: level.input, channel: level.channel },
     lesson: level.lesson,
     technique: card,

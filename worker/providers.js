@@ -31,7 +31,7 @@ export const COST_PER_TURN_USD = 0.00005;
 export async function callProvider(env, req) {
   switch (providerName(env)) {
     case "workers-ai": return callWorkersAI(env, req);
-    case "groq": return callOpenAICompat(env, req, "https://api.groq.com/openai/v1/chat/completions", env.GROQ_API_KEY, MODELS.groq);
+    case "groq": return callGroq(env, req);
     case "google": return callGoogle(env, req);
     case "ollama": return callOllama(env, req);
     default: return callMock(req);
@@ -84,12 +84,39 @@ async function callWorkersAI(env, { system, messages }) {
   return (out && (out.response || out.result)) || "";
 }
 
+// Groq retires model ids without notice. Try the configured model first, then the
+// current production list, and remember whichever answers.
+const GROQ_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"];
+let groqModel = null;
+async function callGroq(env, req) {
+  const order = [];
+  if (groqModel) order.push(groqModel);
+  if (env.GROQ_MODEL) order.push(env.GROQ_MODEL);
+  for (const m of GROQ_MODELS) if (!order.includes(m)) order.push(m);
+  let lastErr = null;
+  for (const model of order) {
+    try {
+      const out = await callOpenAICompat(env, req, "https://api.groq.com/openai/v1/chat/completions", env.GROQ_API_KEY, model);
+      if (groqModel !== model) { groqModel = model; console.info("groq model in use: " + model); }
+      return out;
+    } catch (e) {
+      lastErr = e;
+      if (!/model_not_found|does not exist|decommissioned|HTTP 404/.test(String(e))) throw e;
+    }
+  }
+  throw lastErr;
+}
+
 async function callOpenAICompat(env, { system, messages }, url, key, model) {
   if (!key) throw new Error(`API key missing for ${model}`);
   const r = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], max_tokens: 200, temperature: 0 }),
+    body: JSON.stringify({
+      model, messages: [{ role: "system", content: system }, ...messages], max_tokens: 600, temperature: 0,
+      // gpt-oss spends its budget on reasoning first; keep that short so the answer survives.
+      ...(/gpt-oss/.test(model) ? { reasoning_effort: "low" } : {}),
+    }),
   });
   if (!r.ok) throw new Error(`${model} HTTP ${r.status}: ${await r.text()}`);
   const j = await r.json();
