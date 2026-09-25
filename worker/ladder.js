@@ -27,3 +27,11 @@ export function ladderId(env) {
 export function ladderFor(env) {
   return LADDERS[ladderId(env)];
 }
+
+// The id a word is derived from (secret.js). The 35 keeps the bare level number,
+// so its words are unchanged; any other ladder mixes its id in, so level N on one
+// ladder never shares a word with level N on another, even on the day of a switch.
+export function wordId(ladder, n) {
+  const id = typeof ladder === "string" ? ladder : ladder.META.id;
+  return id === DEFAULT_LADDER ? n : `${id}:${n}`;
+}

@@ -18,7 +18,10 @@ LADDER = "35"
 PROVIDER = "groq"
 GROQ_MODEL = "openai/gpt-oss-20b"   # llama-3.1-8b-instant was retired on the free tier 2026-08-16
 DAILY_CANDLES = "300"      # model turns per player per day (candles.js default; a full run fits)
-GLOBAL_DAILY_TURNS = "5000" # THE global ceiling. Free-tier accounts take no card, so this caps quota, not money.
+# THE global ceiling. Free-tier accounts take no card, so this caps quota, not money.
+# Keep it at or below the provider's daily request limit (Groq free, gpt-oss-20b:
+# about 1,000/day per third-party summaries; check your account's limits page).
+GLOBAL_DAILY_TURNS = "1000"
 
 # --- Optional bindings. Uncommented + created, the Worker uses them; left off,
 # --- it falls back to in-memory counters and console logging (fine for local).
@@ -38,7 +41,7 @@ GLOBAL_DAILY_TURNS = "5000" # THE global ceiling. Free-tier accounts take no car
 # [ai]
 # binding = "AI"
 # and pick a live model (the old llama-3.1-8b-instruct was retired 2026-05-30):
-#   npx wrangler ai models --search llama   then add WORKERS_AI_MODEL = "<id>" to [vars].
+#   npx wrangler ai models list --search llama   then add WORKERS_AI_MODEL = "<id>" to [vars].
 
 # SERVER_KEY (secret, not a var) keys the word derivation in production:
 #   wrangler secret put SERVER_KEY

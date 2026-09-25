@@ -88,6 +88,12 @@ const CARDS = {
     fix: "Processed content must not be able to add tasks. Constrain the output format, confirm any action with the real user, and scan for additions the user never asked for.",
     doc: "curriculum/red-team-onboarding.html",
   },
+  adaptive_stack: {
+    title: "Layered defenses, adaptive guard",
+    how: "A hardened guard, a screen on the way in, a judge on the way out, false words beside the true one, and patches against the ways you won before. No single layer failed on its own; the gaps lined up.",
+    fix: "Layers only help when they fail differently. Give each one the whole conversation, test the stack against combined approaches rather than one trick at a time, and keep the secret out of the model's context so the stack is never the last line.",
+    doc: "curriculum/red-team-onboarding.html",
+  },
   role_boundary: {
     title: "Role-boundary forgery",
     how: "Role markers are text, not enforced structure. Something inside data looked like a turn from someone with authority, and the model read it that way. Models trained on different chat templates fall to different lookalikes.",
@@ -97,7 +103,8 @@ const CARDS = {
 };
 
 export function buildReveal(level, secret, winningMessage, theme = {}) {
-  const card = CARDS[level.probeFamily] || {
+  // The adaptive finals are beaten by the whole stack, not by one family.
+  const card = CARDS[level.adaptive ? "adaptive_stack" : level.probeFamily] || {
     title: "Technique", how: "You found a path the defense did not cover.",
     fix: "Find the assumption this defense made and remove it.", doc: "curriculum/how-prompt-injection-works.html",
   };

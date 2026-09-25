@@ -7,11 +7,18 @@
 //   Global, per day:      GLOBAL_DAILY_TURNS across everyone (default 5000). When
 //                         hit, the crypt closes for all until midnight and says so.
 //
-// Only real inference spends a candle. Filter blocks and hints do not.
+// Only real inference spends a candle. Filter blocks and hints do not, and a turn
+// the provider failed to answer is refunded.
 // An admin session (Dave testing) is never closed out, but still counts.
+//
+// Spends and refunds run one at a time (lock.js), so parallel turns cannot read
+// the same count and each write back +1. That holds within one process: the Node
+// host, or one Workers isolate. KV across isolates is eventually consistent and
+// cannot enforce a hard ceiling.
 
 import { getStore } from "./store.js";
 import { COST_PER_TURN_USD } from "./providers.js";
+import { serial } from "./lock.js";
 
 function day() { return new Date().toISOString().slice(0, 10); }
 function hour() { return new Date().toISOString().slice(0, 13); }
@@ -60,14 +67,28 @@ export async function getState(env, playerId, ipKey, admin = false) {
 // Spend one candle for a real model turn. Returns {ok, state}. On !ok, state.reason
 // explains which ceiling closed the door.
 export async function spendCandle(env, playerId, ipKey, admin = false) {
-  const pre = await getState(env, playerId, ipKey, admin);
-  if (pre.closed) return { ok: false, state: pre };
+  return serial("candles", async () => {
+    const pre = await getState(env, playerId, ipKey, admin);
+    if (pre.closed) return { ok: false, state: pre };
+    await bump(env, playerId, ipKey, pre, +1);
+    return { ok: true, state: await getState(env, playerId, ipKey, admin) };
+  });
+}
+
+// Give back a candle spent on a turn the provider never answered.
+export async function refundCandle(env, playerId, ipKey, admin = false) {
+  return serial("candles", async () => {
+    const pre = await getState(env, playerId, ipKey, admin);
+    await bump(env, playerId, ipKey, pre, -1);
+    return getState(env, playerId, ipKey, admin);
+  });
+}
+
+async function bump(env, playerId, ipKey, pre, by) {
   const store = getStore(env);
   const d = day();
   const ttl = ttlToMidnight();
-  await store.set(`cand:${playerId}:${d}`, pre.dailyUsed + 1, ttl);
-  await store.set(`global:${d}`, pre.globalUsed + 1, ttl);
-  if (ipKey) await store.set(`ip:${ipKey}:${hour()}`, pre.ipUsed + 1, 3700);
-  const post = await getState(env, playerId, ipKey, admin);
-  return { ok: true, state: post };
+  await store.set(`cand:${playerId}:${d}`, Math.max(0, pre.dailyUsed + by), ttl);
+  await store.set(`global:${d}`, Math.max(0, pre.globalUsed + by), ttl);
+  if (ipKey) await store.set(`ip:${ipKey}:${hour()}`, Math.max(0, pre.ipUsed + by), 3700);
 }

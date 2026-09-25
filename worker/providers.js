@@ -22,7 +22,7 @@ import { PERSONAS } from "./guard.js";
 // llama-3.3-70b-versatile for free/developer accounts on 2026-08-16 (replacement
 // named: openai/gpt-oss-20b), and Workers AI retired @cf/meta/llama-3.1-8b-instruct
 // on 2026-05-30. The Workers AI default below is the closest 8B id reported live in
-// September 2026; confirm with `npx wrangler ai models --search llama` before relying on it.
+// September 2026; confirm with `npx wrangler ai models list --search llama` before relying on it.
 const MODELS = {
   "workers-ai": "@cf/meta/llama-3.1-8b-instruct-fp8",
   groq: "openai/gpt-oss-20b",
@@ -89,9 +89,12 @@ async function callWorkersAI(env, { system, messages }) {
   if (!env.AI) throw new Error("Workers AI binding (env.AI) is not configured");
   const model = env.WORKERS_AI_MODEL || MODELS["workers-ai"];
   const out = await env.AI.run(model, {
-    messages: [{ role: "system", content: system }, ...messages], max_tokens: 400, temperature: 0,
+    messages: [{ role: "system", content: system }, ...messages], max_tokens: 600, temperature: 0,
   });
-  return nonEmpty((out && (out.response || out.result)) || "", model);
+  // Llama-family models answer in `response`; newer catalog models (glm, gemma,
+  // kimi) answer in the chat-completions shape.
+  const text = out && (out.response || out.result || out.choices?.[0]?.message?.content);
+  return nonEmpty(typeof text === "string" ? text : "", model, out?.choices?.[0]?.finish_reason);
 }
 
 // Groq retires model ids without notice. Try the configured model first, then the
@@ -129,9 +132,17 @@ async function callOpenAICompat(env, { system, messages }, url, key, model) {
       ...(/gpt-oss/.test(model) ? { reasoning_effort: "low" } : {}),
     }),
   });
-  if (!r.ok) throw new Error(`${model} HTTP ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw providerError(`${model} HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
   return nonEmpty(j.choices?.[0]?.message?.content || "", model, j.choices?.[0]?.finish_reason);
+}
+
+// An error the router can classify: 429 (rate limit or daily quota), 413 (the
+// request is over the provider's per-request token cap), anything else.
+function providerError(message, status) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
 }
 
 // An empty completion is an error, not a reply: the caller refunds the exchange
@@ -147,15 +158,28 @@ async function callGoogle(env, { system, messages }) {
   if (!key) throw new Error("GOOGLE_API_KEY missing");
   const model = env.GOOGLE_MODEL || MODELS.google;
   const contents = messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }));
+  // Thinking is billed against maxOutputTokens and a guard turn needs little of it.
+  //   2.5 Flash: thinking can be switched off.
+  //   Gemini 3: it cannot, so ask for the lowest level, leave room for it, and keep
+  //   the default temperature (Google warns that low temperatures can loop on 3.x).
+  //   2.5 Pro: cannot switch it off either; 128 is its smallest budget.
+  //   Anything else: no thinking settings (a model without thinking rejects them).
   const generationConfig = { maxOutputTokens: 400, temperature: 0 };
-  // 2.5 Flash thinks by default and bills it against maxOutputTokens; a guard turn needs none.
   if (/2\.5-flash/.test(model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  else if (/gemini-3/.test(model)) {
+    delete generationConfig.temperature;
+    generationConfig.maxOutputTokens = 2048;
+    generationConfig.thinkingConfig = { thinkingLevel: "low" };
+  } else if (/2\.5-pro/.test(model)) {
+    generationConfig.maxOutputTokens = 1024;
+    generationConfig.thinkingConfig = { thinkingBudget: 128 };
+  }
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
     { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig }) }
   );
-  if (!r.ok) throw new Error(`google ${model} HTTP ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw providerError(`google ${model} HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
   return nonEmpty(j.candidates?.[0]?.content?.parts?.[0]?.text || "", model, j.candidates?.[0]?.finishReason);
 }
@@ -165,7 +189,7 @@ async function callOllama(env, { system, messages }) {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: env.OLLAMA_MODEL || MODELS.ollama, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
   });
-  if (!r.ok) throw new Error(`ollama HTTP ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw providerError(`ollama HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
   return j.message?.content || "";
 }

@@ -112,7 +112,8 @@ export function runOutputFilters(level, reply, secret) {
     }
     if (layer === "O3") {
       if (stripped.includes(s)) return { layer: "O3", reason: "word recoverable from letters" };
-      for (let i = 0; i + 4 <= s.length; i++) if (stripped.includes(s.slice(i, i + 4))) return { layer: "O3", reason: `4-letter fragment "${s.slice(i,i+4)}"` };
+      // The reason goes to the browser: it names the kind of leak, never the letters.
+      for (let i = 0; i + 4 <= s.length; i++) if (stripped.includes(s.slice(i, i + 4))) return { layer: "O3", reason: "4-letter fragment" };
       if (isolatedLettersInOrder(scan, s)) return { layer: "O3", reason: "letters leaked in order" };
     }
     if (layer === "O4") {
@@ -139,13 +140,22 @@ export function maskLeak(reply, secret, stitched = "The reply was withheld.") {
   return out;
 }
 
+// The part of a reply the output filters read: on the reasoning channel, the
+// answer without its <think> trace (that gap is the reasoning level's lesson).
+function answerOf(level, reply) {
+  return level.channel === "cot" ? reply.replace(/<think>[\s\S]*?<\/think>/gi, " ") : reply;
+}
+
 // The reply to show once an output filter has fired. The mask only knows the
-// plain, reversed and leet forms, so if the level's own filters still fire on the
-// masked text (NATO initials, base64, hex, rot13, fragments, letters in order),
-// the leak survived masking and the whole reply is withheld.
+// plain, reversed and leet forms. If the level's filters still fire on the masked
+// text, or the answer still carries the word in any readable form (a second form
+// the level does not filter, such as NATO initials beside the plain word), the
+// leak survived masking and the whole reply is withheld.
 export function redact(level, reply, secret, stitched) {
   const masked = maskLeak(reply, secret, stitched);
-  return runOutputFilters(level, masked, secret) ? stitched : masked;
+  if (masked === stitched) return stitched;
+  if (runOutputFilters(level, masked, secret) || detectLeak(answerOf(level, masked), secret)) return stitched;
+  return masked;
 }
 
 // ---------- technique tagger (scout log) ----------

@@ -14,9 +14,11 @@
 //   - hints: up to 2 per attempt, each costs one exchange
 //   - an admin session ignores gating, locks and attempt limits (testing only)
 //   - the conversation lives here, in the open attempt, not in the browser: the
-//     client cannot add, edit or forge turns, and every turn it holds passed the
-//     input filters. Replies are stored as the player saw them (redacted), so the
-//     word is still never stored.
+//     client cannot add, edit or forge turns, and only turns that passed the input
+//     filters are replayed to the guard. Each exchange is kept as the player saw it
+//     (a blocked message, a withheld reply, or an answer), so a resume shows the
+//     same chat. A reply the player earned can hold the word; it is stored only
+//     while the attempt is open and dropped when the attempt closes.
 
 import { getStore } from "./store.js";
 import { daySeed } from "./secret.js";
@@ -24,7 +26,11 @@ import { ladderFor, ladderId, DEFAULT_LADDER } from "./ladder.js";
 
 const HINTS_PER_ATTEMPT = 2;
 const WINS_REMEMBERED = 8;
-const TRANSCRIPT_MAX_CHARS = 60000;   // per attempt; oldest turns drop first
+const TRANSCRIPT_MAX_CHARS = 60000;   // what a resume can show; oldest turns drop first
+// What is replayed to the guard. Groq's free tier caps one request at about 8,000
+// tokens including the reply budget; ~16,000 characters of history (~4,000 tokens)
+// leaves room for the guard prompt, a 4,000-character message and the reply.
+const HISTORY_CHAR_BUDGET = 16000;
 
 // Channels where earlier turns are replayed to the guard as a conversation. On the
 // document and tool channels the player is data, never a speaker, so no history.
@@ -32,20 +38,30 @@ export function keepsHistory(level) {
   return !!level.stateful && (level.channel === "chat" || level.channel === "cot");
 }
 
-// The open attempt's conversation as provider messages.
-export function historyFor(open, level) {
+// The open attempt's conversation as provider messages: answered turns only
+// (a blocked message never reached the guard), newest first until the budget.
+export function historyFor(open, level, budget = HISTORY_CHAR_BUDGET) {
   if (!open || !keepsHistory(level)) return [];
+  const kept = [];
+  let size = 0;
+  for (const t of (open.turns || []).slice().reverse()) {
+    if (t.assistant == null) continue;
+    size += t.user.length + t.assistant.length;
+    if (size > budget) break;
+    kept.unshift(t);
+  }
   const out = [];
-  for (const t of open.turns || []) out.push({ role: "user", content: t.user }, { role: "assistant", content: t.assistant });
+  for (const t of kept) out.push({ role: "user", content: t.user }, { role: "assistant", content: t.assistant });
   return out;
 }
 
 function lockMs(env) { return Number(env.LOCK_HOURS || 24) * 3600 * 1000; }
 // One record per player per ladder. The 35 keeps the original key so progress
-// already stored in production survives; any other ladder gets its own namespace.
+// already stored in production survives. Other ladders use a different prefix
+// ("p@15:"), not "p:15:", so no player id on the 35 can name another ladder's key.
 function key(env, pid) {
   const lad = ladderId(env);
-  return lad === DEFAULT_LADDER ? `p:${pid}` : `p:${lad}:${pid}`;
+  return lad === DEFAULT_LADDER ? `p:${pid}` : `p@${lad}:${pid}`;
 }
 
 export async function loadPlayer(env, pid) {
@@ -128,21 +144,24 @@ export async function openAttempt(env, pid, level) {
   return s.open ? { rec, slot: s, open: s.open } : { rec, slot: s, open: null };
 }
 
-// One exchange spent (a message sent, blocked or answered). An answered turn on a
-// history-keeping level is appended to the transcript. Returns the view.
+// One exchange spent (a message sent, blocked or answered), recorded as the player
+// saw it: { user, assistant, filtered } for an answer, { user, blocked } for a
+// message an input filter stopped. Returns the view.
 export async function noteExchange(env, pid, level, admin, turn = null) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
   if (!s.open) return null;
   s.open.msgs += 1;
-  if (turn && keepsHistory(level)) {
+  if (turn) {
     const turns = s.open.turns || (s.open.turns = []);
-    turns.push({ user: String(turn.user), assistant: String(turn.assistant) });
-    let size = turns.reduce((n, t) => n + t.user.length + t.assistant.length, 0);
-    while (turns.length > 1 && size > TRANSCRIPT_MAX_CHARS) {
-      const t = turns.shift();
-      size -= t.user.length + t.assistant.length;
-    }
+    const t = { user: String(turn.user) };
+    if (turn.assistant != null) t.assistant = String(turn.assistant);
+    if (turn.filtered) t.filtered = turn.filtered;
+    if (turn.blocked) t.blocked = turn.blocked;
+    turns.push(t);
+    const len = (x) => x.user.length + (x.assistant ? x.assistant.length : 0);
+    let size = turns.reduce((n, x) => n + len(x), 0);
+    while (turns.length > 1 && size > TRANSCRIPT_MAX_CHARS) size -= len(turns.shift());
   }
   await savePlayer(env, pid, rec);
   return levelView(rec, level, admin);
@@ -195,6 +214,8 @@ export function doors(env, rec, admin = false) {
   return {
     club: clubEarned ? (env.CLUB_INVITE_URL || "") : null,
     apply: applyEarned,
+    // where the résumé door leads, once earned (APPLY_URL, Dave's hand); "" until set
+    applyUrl: applyEarned ? (env.APPLY_URL || "") : null,
   };
 }
 

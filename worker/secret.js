@@ -3,7 +3,9 @@
 // The word is DERIVED, never stored and never sent to the browser. It is an
 // HMAC of (serverKey, sessionId, levelId, daySeed) mapped to a pronounceable
 // nonsense word. Verification recomputes it, so there is nothing to steal from
-// the client and nothing to leak from a database. Brute force is bounded by the
+// the client and no word list in any database. (The only stored copies are replies
+// a player earned: in their open attempt, and in the attempt log.) On any ladder
+// but the 35, levelId arrives prefixed with the ladder (ladder.js wordId). Brute force is bounded by the
 // per-level dig limit and the per-player candle allowance, both enforced
 // server-side.
 

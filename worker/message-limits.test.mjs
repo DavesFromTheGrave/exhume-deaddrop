@@ -40,7 +40,7 @@ for(const [level,ending] of [[1,"hello"],[2,"instructions"],[3,"hint"],[4,"story
   const result=await f.turn(level,message);
   const secret=await deriveSecret(f.env.SERVER_KEY,"test-player",level,daySeed());
   assert.equal(result.status,200);assert.ok(result.data.reply.includes(secret));
-  assert.equal(f.records[before][8],message);
+  assert.equal(f.records[before][9],message);
  });
 }
 test("overlong later message is rejected without truncation, logging or spending",async()=>{
@@ -55,7 +55,7 @@ test("exactly 4000 characters is accepted on crypt 5",async()=>{
  const req=(path,body)=>new Request("https://test.invalid/api/"+path,{method:"POST",headers:{"content-type":"application/json","x-player-id":"test-player","x-admin":"1"},body:JSON.stringify(body)});
  assert.equal((await worker.fetch(req("start",{levelId:5}),admin)).status,200);
  const r=await worker.fetch(req("turn",{levelId:5,message}),admin);
- assert.equal(r.status,200);assert.equal(f.records[0][8],message);
+ assert.equal(r.status,200);assert.equal(f.records[0][9],message);
 });
 test("a turn with no open attempt is refused and spends nothing",async()=>{
  const f=fixture("35"),result=await f.turn(1,"hello");

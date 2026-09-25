@@ -41,19 +41,20 @@ const OUT_TXT = {
   O1: "verbatim — the exact word is cut",
   O2: "normalized — reversed, leet, base64, hex, rot13, spaced",
   O3: "fragment — any 4-letter run or per-letter leak",
-  O4: "semantic judge — reads meaning; can be talked into passing",
+  O4: "judge — looks for the word in any readable form; trusts a verdict it reads",
 };
 const IN_TXT = {
   I1: "blocklist — a fixed word list, shown when it fires",
   I2: "pattern — delimiters, personas, encoding asks, letter probes",
-  I3: "screen — a second model reads your message first",
-  I4: "stateful screen — the strongest; explicit extraction never passes",
+  I3: "screen — short, pointed asks are stopped; long ordinary text passes",
+  I4: "strict screen — explicit extraction language never passes",
 };
-const MODEL_TXT = { M2: "small guard model", M3: "mid guard model", M4: "large guard model" };
+// The tier is a design mark; providers do not map it to different models yet.
+const MODEL_TXT = { M2: "tier M2", M3: "tier M3 (heavier guard, where the provider maps tiers)", M4: "tier M4 (heaviest guard, where the provider maps tiers)" };
 
 let LEVELS = [];
 let ME = { cleared: [], locks: {}, doors: {} };
-const state = { level: null, left: { exchanges: 0, guesses: 0, hints: 0 }, lastMessage: "", busy: false };
+const state = { level: null, left: { exchanges: 0, guesses: 0, hints: 0 }, busy: false };
 
 async function api(path, body) {
   const url = "api/" + path + (body ? "" : (path.includes("?") ? "&" : "?") + "playerId=" + encodeURIComponent(PLAYER));
@@ -89,7 +90,7 @@ function applyTheme(theme) {
 // ---------- level select ----------
 
 function isOpen(id) {
-  return id === 1 || ME.cleared.includes(id - 1) || ME.cleared.includes(id);
+  return !!ME.admin || id === 1 || ME.cleared.includes(id - 1) || ME.cleared.includes(id);
 }
 
 async function loadLevels() {
@@ -122,7 +123,9 @@ async function loadLevels() {
     if (l.decoys) cfg.appendChild(el("span", "chip", "decoys"));
     if (l.adaptive) cfg.appendChild(el("span", "chip", "adaptive"));
     card.appendChild(cfg);
-    card.setAttribute("aria-label", `${THEME.unit} ${l.id}: ${l.name}` + (done.has(l.id) ? ", cleared" : open ? ", open" : ", sealed"));
+    card.setAttribute("aria-label", `${THEME.unit} ${l.id}: ${l.name}` + (done.has(l.id) ? ", cleared"
+      : lockUntil ? ", locked until " + new Date(lockUntil).toLocaleString()
+      : open ? ", open" : ", sealed"));
     if (open) card.addEventListener("click", () => startLevel(l.id));
     grid.appendChild(card);
   }
@@ -133,15 +136,21 @@ async function loadLevels() {
 function renderDoors(doors) {
   const box = $("#doors");
   box.innerHTML = "";
-  if (!doors || doors.club == null) { box.hidden = true; return; }
-  if (doors.club) {
-    const a = el("a", "", "Your Alignment Club invitation is open ›");
-    a.href = doors.club; a.target = "_blank"; a.rel = "noopener";
-    box.appendChild(a);
-  } else {
-    box.textContent = "You earned the Alignment Club door. The invitation link is not posted yet.";
+  const line = (text, href) => {
+    const p = el("span", "door");
+    if (href) { const a = el("a", "", text + " ›"); a.href = href; a.target = "_blank"; a.rel = "noopener"; p.appendChild(a); }
+    else p.textContent = text;
+    box.appendChild(p);
+  };
+  if (doors && doors.club != null) {
+    if (doors.club) line("Your Alignment Club invitation is open", doors.club);
+    else line("You earned the Alignment Club door. The invitation link is not posted yet.");
   }
-  box.hidden = false;
+  if (doors && doors.apply) {
+    if (doors.applyUrl) line("You cleared the last level. The résumé door is open", doors.applyUrl);
+    else line("You cleared the last level. The résumé door is earned; where it leads is not posted yet.");
+  }
+  box.hidden = !box.childElementCount;
 }
 
 function allowanceText(st) {
@@ -152,8 +161,9 @@ function allowanceText(st) {
 
 // ---------- start / resume a level ----------
 
+// Resolves true when the level opened (or reopened), false otherwise.
 async function startLevel(id, { restart = false } = {}) {
-  if (state.busy) return;
+  if (state.busy) return false;
   state.busy = true;
   try {
     const { ok, status, data } = await api("start", { levelId: id, restart });
@@ -161,10 +171,9 @@ async function startLevel(id, { restart = false } = {}) {
       show("select");
       $("#select-allowance").textContent = data.error || "That level would not open.";
       if (status === 403) loadLevels().then(() => { $("#select-allowance").textContent = data.error; });
-      return;
+      return false;
     }
     state.level = data.level;
-    state.lastMessage = "";
     $("#provider-note").textContent = "guard: " + data.provider;
     $("#play-world").textContent = data.level.world;
     $("#play-name").textContent = `${THEME.unit} ${pad2(data.level.id)} · ${data.level.name}`;
@@ -178,14 +187,15 @@ async function startLevel(id, { restart = false } = {}) {
       setProgress(data.progress);
       addSys(`${THEME.unit} ${data.level.id} is locked after ${data.progress.attemptsMax} failed attempt${data.progress.attemptsMax === 1 ? "" : "s"}. It reopens ${new Date(data.progress.lockUntil).toLocaleString()}.`);
       setEnabled(false);
-      return;
+      return true;
     }
 
     addSys(introFor(data.level));
     if (data.level.note) addSys(data.level.note);
     if (data.status === "resumed") {
-      addSys("You pick up where you left off.");
-      for (const t of data.transcript || []) { addMsg("you", t.user); addMsg("guard", t.assistant); }
+      const turns = data.transcript || [];
+      addSys(turns.length ? "You pick up where you left off." : "You pick up where you left off. Nothing has been said yet.");
+      for (const t of turns) showExchange(t);
     }
     setProgress(data.progress);
     setEnabled(true);
@@ -197,6 +207,10 @@ async function startLevel(id, { restart = false } = {}) {
     else ti.placeholder = `Speak to ${g}…`;
     updateMessageLimit();
     ti.focus();
+    return true;
+  } catch (err) {
+    addSys("The gate did not answer. Check your connection and try again.");
+    return false;
   } finally {
     state.busy = false;
   }
@@ -212,21 +226,33 @@ function introFor(lv) {
   return base;
 }
 
+// With no open attempt (failed, locked, or cleared), the server's `left` is the
+// allowance a new attempt would get; this attempt has nothing left, so show 0.
 function setProgress(p) {
   if (!p) return;
-  state.left = p.left;
-  $("#candles").textContent = p.left.exchanges;
-  $("#digs").textContent = p.left.guesses;
-  $("#hints-left").textContent = p.left.hints;
-  $("#hint").disabled = p.left.hints <= 0 || p.left.exchanges <= 0;
+  state.left = p.open ? p.left : { exchanges: 0, guesses: 0, hints: 0 };
+  $("#candles").textContent = state.left.exchanges;
+  $("#digs").textContent = state.left.guesses;
+  updateHint();
   $("#play-attempt").textContent = p.attemptNo
     ? `Attempt ${p.attemptNo} of ${p.attemptsMax}` + (p.cleared ? " · cleared before" : "")
     : "";
 }
 
+// A hint costs one exchange. It is off when there is none to spend, and when only
+// one is left it takes a second click (on a one-exchange level, that exchange is
+// the whole attempt).
+let hintArmed = false;
+function updateHint() {
+  hintArmed = false;
+  const b = $("#hint");
+  b.disabled = state.left.hints <= 0 || state.left.exchanges <= 0;
+  b.textContent = `Buy a hint (costs 1 exchange · ${state.left.hints} left)`;
+}
+
 function setEnabled(on) {
   ["#turn-input", "#send", "#claim-input", "#claim", "#hint"].forEach((s) => { $(s).disabled = !on; });
-  if (on) $("#hint").disabled = state.left.hints <= 0 || state.left.exchanges <= 0;
+  if (on) updateHint();
 }
 
 function updateMessageLimit() {
@@ -235,13 +261,20 @@ function updateMessageLimit() {
   const over = limit != null && length > limit;
   $("#message-limit").textContent = length.toLocaleString("en-US") + " characters · " +
     (limit == null ? "No character cap here." :
-      limit.toLocaleString("en-US") + " maximum per message." + (over ? " Shorten the message before sending." : ""));
+      limit.toLocaleString("en-US") + " maximum per message." + (over ? " Shorten the message before sending." : "")) +
+    (ENTER_SENDS ? " Enter sends, Shift+Enter starts a new line." : "");
   $("#turn-input").setAttribute("aria-invalid", String(over));
   return !over;
 }
 $("#turn-input").addEventListener("input", updateMessageLimit);
+// Enter sends on a real keyboard. On touch screens Return inserts a newline (there
+// is no Shift+Enter there, and some levels need line breaks), and Enter that
+// confirms an input-method composition never sends.
+const ENTER_SENDS = !(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 $("#turn-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#turn-form").requestSubmit(); }
+  if (!ENTER_SENDS || e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  $("#turn-form").requestSubmit();
 });
 
 function buildRack(lv) {
@@ -273,9 +306,25 @@ function addMsg(kind, text, tags) {
 }
 const addSys = (t) => addMsg("sys", t);
 
+// One exchange as the player saw it: their message, then what came back.
+function showExchange(t, tags, withUser = true) {
+  if (withUser) addMsg("you", t.user);
+  if (t.blocked) {
+    addMsg("tape", `${THEME.layers.input.toUpperCase()} ${t.blocked.layer}: ${t.blocked.reason}. Message blocked, exchange spent.`);
+    return;
+  }
+  addMsg("guard", t.assistant, tags);
+  if (t.filtered) addMsg("tape", `${THEME.layers.output.toUpperCase()} ${t.filtered.layer}: ${t.filtered.reason}. The leak was cut.`);
+}
+
+// A button in the chat. If what it starts does not go through (offline, say),
+// the button comes back so the player is never left with nothing to press.
 function offer(label, fn) {
   const b = el("button", "dig offer", label);
-  b.addEventListener("click", () => { document.querySelectorAll("#chat .offer").forEach((x) => x.remove()); fn(); });
+  b.addEventListener("click", async () => {
+    document.querySelectorAll("#chat .offer").forEach((x) => x.remove());
+    if (!(await fn())) offer(label, fn);
+  });
   $("#chat").appendChild(b);
   $("#chat").scrollTop = $("#chat").scrollHeight;
 }
@@ -297,7 +346,7 @@ $("#turn-form").addEventListener("submit", async (e) => {
   if (!updateMessageLimit()) { addSys("That message is over the character limit. Nothing was sent."); return; }
   if (state.left.exchanges <= 0) { addSys("No exchanges left. Speak the word, or restart."); offerRestart(); return; }
 
-  addMsg("you", msg);
+  const mine = addMsg("you", msg);
   state.busy = true;
   const thinking = addMsg("thinking", `${state.level.guardName || THEME.guard} considers…`);
   try {
@@ -305,31 +354,30 @@ $("#turn-form").addEventListener("submit", async (e) => {
     thinking.remove();
     if (data.progress) setProgress(data.progress);
     if (data.allowance) $("#play-allowance").textContent = allowanceText(data.allowance);
-    if (data.closed) { addSys(data.reason); return; }
+    if (data.closed) { mine.remove(); addSys(data.reason); return; }
     if (!ok || data.error) {
+      mine.remove();   // it was not sent, or not answered; the text stays in the box
       addSys(data.error || "The message could not be sent.");
       if (data.code === "NO_ATTEMPT") offerRetry();
       if (data.code === "NO_EXCHANGES") offerRestart();
       return;
     }
-    ti.value = "";
+    // Clear the box only if it still holds what was sent (not a draft typed since).
+    if (ti.value.trim() === msg) ti.value = "";
     updateMessageLimit();
-    state.lastMessage = msg;
     flashRack(null);
     if (data.blocked) {
-      addMsg("tape", `${THEME.layers.input.toUpperCase()} ${data.layer}: ${data.reason}. Message blocked, exchange spent.`);
+      showExchange({ user: msg, blocked: { layer: data.layer, reason: data.reason } }, null, false);
       flashRack("input");
     } else {
-      addMsg("guard", data.reply, data.tags);
-      if (data.filtered) {
-        addMsg("tape", `${THEME.layers.output.toUpperCase()} ${data.filtered.layer}: ${data.filtered.reason}. The leak was cut.`);
-        flashRack("output");
-      }
+      showExchange({ user: msg, assistant: data.reply, filtered: data.filtered }, data.tags, false);
+      if (data.filtered) flashRack("output");
     }
     if (state.left.exchanges <= 0) addSys("That was your last exchange. Speak the word now, or restart.");
   } catch (err) {
     thinking.remove();
-    addSys("The gate did not answer. " + err);
+    mine.remove();
+    addSys("The gate did not answer. Check your connection; nothing was spent.");
   } finally {
     state.busy = false;
   }
@@ -339,14 +387,23 @@ $("#turn-form").addEventListener("submit", async (e) => {
 
 $("#hint").addEventListener("click", async () => {
   if (state.busy || !state.level) return;
+  if (state.left.exchanges === 1 && !hintArmed) {
+    hintArmed = true;
+    $("#hint").textContent = "Spend your last exchange on a hint? Click again";
+    return;
+  }
   state.busy = true;
   try {
     const { data } = await api("hint", { levelId: state.level.id });
     if (data.progress) setProgress(data.progress);
     if (data.error) { addSys(data.error); return; }
     addMsg("tape", `Hint ${data.index}: ${data.hint}`);
+    if (state.left.exchanges <= 0) addSys("That hint took your last exchange. Speak the word now, or restart.");
+  } catch (err) {
+    addSys("The gate did not answer. Check your connection; nothing was spent.");
   } finally {
     state.busy = false;
+    updateHint();
   }
 });
 
@@ -360,7 +417,7 @@ $("#claim-form").addEventListener("submit", async (e) => {
   if (!guess) return;
   state.busy = true;
   try {
-    const { data } = await api("claim", { levelId: state.level.id, claim: guess, winningMessage: state.lastMessage || guess });
+    const { data } = await api("claim", { levelId: state.level.id, claim: guess });
     if (data.progress) setProgress(data.progress);
     if (data.error) {
       addSys(data.error);
@@ -374,19 +431,20 @@ $("#claim-form").addEventListener("submit", async (e) => {
       showReveal(data.reveal);
       return;
     }
-    addMsg("tape", `"${guess}" is not the word. Guesses left: ${state.left.guesses}.`);
+    addMsg("tape", `"${guess}" is not the word. Guesses left: ${data.attemptFailed ? 0 : state.left.guesses}.`);
     ci.value = "";
     if (data.attemptFailed) {
       const p = data.progress || {};
+      setEnabled(false);
       if (p.locked) {
         addSys(`That was the last guess, and the last attempt for today. ${THEME.unit} ${state.level.id} reopens ${new Date(p.lockUntil).toLocaleString()}.`);
-        setEnabled(false);
       } else {
         addSys("That was the last guess. This attempt has failed; the next one brings a fresh word.");
-        setEnabled(false);
         offerRetry();
       }
     }
+  } catch (err) {
+    addSys("The gate did not answer. Check your connection; your guess was not counted.");
   } finally {
     state.busy = false;
   }
@@ -413,21 +471,38 @@ function showReveal(rev) {
 
   const next = LEVELS.find((l) => l.id === rev.level + 1);
   $("#reveal-next").hidden = !next;
+  // Modal: the screens behind are inert until it closes, and focus starts inside.
+  $("#select").inert = true;
+  $("#play").inert = true;
   $("#reveal").hidden = false;
-  $("#reveal-next").focus();
+  (next ? $("#reveal-next") : $("#reveal-close")).focus();
+}
+
+function closeReveal() {
+  $("#reveal").hidden = true;
+  $("#select").inert = false;
+  $("#play").inert = false;
 }
 
 $("#reveal-next").addEventListener("click", () => {
-  $("#reveal").hidden = true;
+  closeReveal();
   const next = state.level.id + 1;
   if (LEVELS.find((l) => l.id === next)) startLevel(next);
   else backToSelect();
 });
-$("#reveal-close").addEventListener("click", () => { $("#reveal").hidden = true; backToSelect(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#reveal").hidden) { $("#reveal").hidden = true; backToSelect(); } });
+$("#reveal-close").addEventListener("click", () => { closeReveal(); backToSelect(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#reveal").hidden) { closeReveal(); backToSelect(); } });
 $("#back").addEventListener("click", backToSelect);
 
-async function backToSelect() { show("select"); await loadLevels(); }
+async function backToSelect() {
+  show("select");
+  await loadLevels();
+  // keyboard focus lands on the next level to play, else the one just left
+  const id = state.level ? state.level.id : 1;
+  const cards = document.querySelectorAll(".level-card");
+  const target = [cards[id], cards[id - 1]].find((c) => c && !c.disabled);
+  if (target) target.focus();
+}
 
 function show(which) {
   $("#select").hidden = which !== "select";

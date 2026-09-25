@@ -31,8 +31,9 @@ both exist.
 
 ## Run it locally
 
-Needs Node 18+ (built on Node 26). No Cloudflare account, no API keys, no GPU:
-the default guard is a deterministic offline stand-in.
+Needs Node 18+ (built on Node 26). Offline play needs no Cloudflare account, no
+API keys and no GPU: pass `--var PROVIDER:mock` for the deterministic stand-in
+guard. Without it, `wrangler.toml` uses Groq and needs `GROQ_API_KEY` in `.dev.vars`.
 
 ```bash
 npm install
@@ -43,7 +44,7 @@ Open the URL Wrangler prints (defaults to `http://127.0.0.1:8787`; this machine
 reserves that port, so a fixed free port is used instead):
 
 ```bash
-npx wrangler dev --port 4321 --ip 127.0.0.1 --inspector-port 0
+npx wrangler dev --port 4321 --ip 127.0.0.1 --inspector-port 0 --var PROVIDER:mock
 ```
 
 Then open `http://127.0.0.1:4321`. First play needs no login; a random player id
@@ -72,7 +73,7 @@ Model ids retire under you. Groq retired `llama-3.1-8b-instant` and
 `llama-3.3-70b-versatile` for free and developer accounts on 2026-08-16 and names
 `openai/gpt-oss-20b` as the replacement. Workers AI retired
 `@cf/meta/llama-3.1-8b-instruct` on 2026-05-30; check the live catalog with
-`npx wrangler ai models --search llama` before setting `WORKERS_AI_MODEL`.
+`npx wrangler ai models list --search llama` before setting `WORKERS_AI_MODEL`.
 gpt-oss is a reasoning model: its reasoning shares the `max_tokens` budget, so
 the Groq call sends `reasoning_effort: "low"`, and an empty completion is treated
 as an error (the player's exchange is not spent) rather than a blank reply. The
@@ -89,18 +90,28 @@ one of the real providers.
 
 ## The cost ceiling
 
-Two caps, both in the `[vars]` block of [`wrangler.toml`](wrangler.toml):
+Three caps, set in the `[vars]` block of [`wrangler.toml`](wrangler.toml) or the
+Node app's environment:
 
-- `DAILY_CANDLES` (default 60): turns per player per day. Spent, the player waits
-  for midnight UTC.
-- `GLOBAL_DAILY_TURNS` (default 5000): total inference turns per day across
-  everyone. Hit, the crypt closes for all until midnight and says so. At roughly
-  `$0.00005` per 8B turn, 5000 is about `$0.25` a day.
+- `DAILY_CANDLES` (default 300): model turns per player per day. Spent, the
+  player waits for midnight UTC.
+- `IP_HOURLY_TURNS` (default 120): model turns per connection per hour.
+- `GLOBAL_DAILY_TURNS` (wrangler.toml: 1000): model turns per day across
+  everyone. Hit, the game closes for all until midnight and says so. Set it at or
+  below the provider's own daily request limit, so the game closes with a clear
+  message before the provider starts refusing. Third-party summaries put Groq's
+  free tier for `openai/gpt-oss-20b` at about 1,000 requests a day and 8,000
+  tokens per minute; check your account's limits page.
 
 Only real inference spends a candle. A message stopped by an input filter does no
-inference and does not touch the cost cap (it still costs a level candle, which
-the client counts). None of the free-tier provider accounts take a card, so
-overage is impossible, not merely unlikely.
+inference and does not touch the cost cap (it still spends an exchange). A turn
+the provider fails to answer is refunded and spends no exchange; a rate limit
+(429) tells the player the guard is at capacity. None of the free-tier provider
+accounts take a card, so overage is impossible, not merely unlikely.
+
+Counts are kept one request at a time within a process (`worker/lock.js`), which
+covers the Node host. On Workers, KV across isolates is eventually consistent,
+so the caps there are close, not exact.
 
 Counters live in a KV namespace (binding `EXHUME_KV`) when one is bound, else in
 memory (fine for local; resets on reload). Attempt logs go to a D1 table
@@ -110,12 +121,14 @@ per attempt to the console.
 ## What is and is not enforced
 
 Server-side, and trustworthy: the word is derived from `SERVER_KEY` and never
-sent; every claim is checked on the Worker; exchanges, guesses, attempts, locks
-and level gating (`worker/progress.js`); the daily, per-IP and global caps; and
-the conversation itself. The transcript lives in the open attempt on the server,
-so every turn the guard sees passed the input filters, and a browser cannot add
-or forge turns. Replies are stored as the player saw them (redacted), so the word
-is still never stored.
+sent outside an earned reply and the reveal; every claim is checked on the
+Worker; exchanges, guesses, attempts, locks and level gating
+(`worker/progress.js`), one request at a time per player; the daily, per-IP and
+global caps; and the conversation itself. The transcript lives in the open
+attempt on the server, so every turn the guard sees passed the input filters, and
+a browser cannot add or forge turns. Each exchange is stored as the player saw
+it, so a reply that earned the word holds it until the attempt closes. Words are
+derived per ladder, so level N on the 35 and level N on the 15 never share one.
 
 When an output filter fires, the reply is withheld unless masking provably
 removed the leak (`redact()` in `worker/filters.js`).
