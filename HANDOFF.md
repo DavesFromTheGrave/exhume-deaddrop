@@ -55,8 +55,8 @@ confirmed) then found and this branch fixed:
   a time globally (`worker/lock.js`); exact within one process.
 - Provider errors spent candles and forwarded raw provider text (org ids).
   Failures now refund and map 429/413 to plain messages.
-- History replay is capped at ~16k characters to fit Groq's free per-request
-  token cap; the full transcript (blocked turns included) is kept for resume.
+- History replayed to the guard is capped (see round two for how); the full
+  transcript (blocked turns included) is kept for resume.
 - The reveal's "winning move" and the adaptive boss's patches came from the
   browser; they now come from the server transcript.
 - Workers per-IP cap never applied; it now uses cf-connecting-ip.
@@ -66,6 +66,26 @@ confirmed) then found and this branch fixed:
 - Client: eleven UX and accessibility fixes (hint cost, counters after a failed
   attempt, resume on every level, Enter on touch and IME, offline retry, modal
   focus, the résumé door, drafts, admin gating, locked labels).
+
+A second review of those fixes (16 confirmed) then changed:
+
+- Words for any ladder but the 35 are derived under their own HMAC key
+  (`ladder.js wordKey`); a crafted player id could still make ladders share a
+  word when the ladder was only mixed into the message.
+- A failed turn refunds its candle only when the provider did no billed work.
+  An empty completion (gpt-oss spent its budget reasoning) keeps the player's
+  exchange but counts toward the daily, per-IP and global caps.
+- Replay is budgeted by a deliberately high token estimate (about 4,000;
+  CJK and base64 count dense), and a 413 is retried once without history.
+- Every provider call times out after 25 s, so a stalled guard cannot hold the
+  player's lock.
+- The log falls back to its old row shape only when the ladder column is
+  missing, never on a transient error.
+- Hints and missed guesses are kept in the transcript for resume (never
+  replayed to the guard).
+- Client: a retry after a lost response is always a plain start, never a second
+  restart; network errors say the request may or may not have landed and offer
+  a re-enter; a refused turn keeps its bubble if a draft was typed.
 
 ## Not done: pick up here
 

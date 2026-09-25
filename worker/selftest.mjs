@@ -298,7 +298,7 @@ console.log("\nreview regressions (stubbed provider through the router):");
     const cases = [
       [{ status: 429, body: '{"error":{"message":"Rate limit reached in organization `org_secret123`"}}' }, 503, "PROVIDER_BUSY", 0],
       [{ status: 413, body: '{"error":{"message":"Request too large"}}' }, 413, "PROVIDER_TOO_LARGE", 0],
-      ["", 502, "PROVIDER_ERROR", 1],
+      ["", 502, "PROVIDER_EMPTY", 1],
     ];
     for (const [reply, status, code, used] of cases) {
       next = reply;

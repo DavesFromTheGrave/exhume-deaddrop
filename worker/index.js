@@ -83,6 +83,9 @@ function levelPayload(lad, level) {
 function providerFailure(e) {
   if (e && e.status === 429) return { status: 503, error: "The guard is at capacity right now. Nothing was spent; try again in a minute.", code: "PROVIDER_BUSY" };
   if (e && e.status === 413) return { status: 413, error: "That message and the conversation so far are too long for the guard to read. Nothing was spent; send something shorter.", code: "PROVIDER_TOO_LARGE" };
+  // The provider ran this one, so it counts toward today's model turns; the
+  // attempt keeps its exchange.
+  if (e && e.billed) return { status: 502, error: "The guard gave an empty answer. This attempt keeps its exchange, but the call counts toward today's model turns. Try again.", code: "PROVIDER_EMPTY" };
   return { status: 502, error: "The gate is silent. The guard did not answer; nothing was spent. Try again.", code: "PROVIDER_ERROR" };
 }
 
