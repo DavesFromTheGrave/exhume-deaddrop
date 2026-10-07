@@ -12,7 +12,7 @@ GitHub does not exist for it. Push both repos before starting one.
   (`worker/levels.js`, default) or `"15"` (`worker/levels.15.js`). Nothing is
   deleted by switching, and progress is stored per ladder, so flipping back is
   the rollback. The swap the old handoff asked about is now one config value,
-  still set to `"35"` until Dave says go.
+  set to `"15"` since 2026-10-07 by Dave's direction (nobody cleared level 4 of the 35).
 - **Reveal cards** name the technique family, how it fell, and the defensive fix
   (`worker/reveal.js`). Concept level; the only payload a reveal shows is the
   player's own winning message.
@@ -89,8 +89,9 @@ A second review of those fixes (16 confirmed) then changed:
 
 ## Not done: pick up here
 
-1. **Flip to the 15**: set `LADDER = "15"` (wrangler.toml and the cPanel app's
-   environment). Needs Dave's yes. Do not flip it on the live site until item 2.
+1. **Flip to the 15**: DONE 2026-10-07. `LADDER = "15"` in wrangler.toml; the
+   cPanel wrapper defaults to "15". `/api/levels` now also returns `doors` so
+   the site client can place the club and résumé doors per ladder.
 2. **Site client (`revenant-deaddrop-site/main.js`)** hard-codes the 35: `TOTAL`,
    `WORLD_NAMES` (maps worlds by index, so The Village would display as a crypt
    name), the seal geometry, and the stage thresholds at 15 and 25. It needs to

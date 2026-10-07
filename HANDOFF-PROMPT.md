@@ -56,7 +56,8 @@ As of 2026-09-25, 12:30 UTC:
   block with the theme copy and the door levels (35: club 10, apply 35; 15: club 14, apply 15).
   Progress keys (p:<id> for the 35, p@15:<id> for the 15) and word keys (ladder.js wordKey) are
   separate per ladder, and the 35's keys and words are the same as before this PR, so flipping
-  LADDER back is the rollback. LADDER is "35" everywhere and stays there until Dave says so.
+  LADDER back is the rollback. LADDER is "15" everywhere since 2026-10-07: Dave directed the
+  switch because nobody ever cleared level 4 of the 35. Do not set it back to "35" without him.
 - The conversation lives on the server in the open attempt; history sent by the client is
   ignored. Requests run one at a time per player (worker/lock.js). That holds within one process:
   exact on a Node host that runs a single process (unverified for Dave's cPanel app, which runs
@@ -111,8 +112,8 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
    env.STORE: the engine trusts x-player-id, x-client-ip and x-admin only when it does (or when
    TRUST_IDENTITY_HEADERS is "1"). Also find out whether Passenger may run more than one process
    for the app; worker/lock.js and the store assume one.
-5. [Dave] Flip to the 15: LADDER = "15" in wrangler.toml and in the cPanel app's environment,
-   only after item 3 ships.
+5. DONE 2026-10-07: LADDER = "15" in wrangler.toml, and the cPanel wrapper (server.mjs) defaults
+   LADDER to "15" when the environment does not set it.
 6. [Dave] Copy worker/ from master to the host (the .js files; not selftest.mjs or
    message-limits.test.mjs), after item 4. If the host logs to D1, run once:
    ALTER TABLE attempts ADD COLUMN ladder TEXT NOT NULL DEFAULT '35';
@@ -124,8 +125,8 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
 
 <constraints>
 Each holds for every change, and the reason comes with it.
-- LADDER stays "35" until Dave says otherwise, because the live front end only knows the 35 and
-  flipping early breaks the public page.
+- LADDER stays "15" until Dave says otherwise. He directed the switch on 2026-10-07 after the
+  35 proved unplayable (nobody cleared level 4); the 35 stays on disk behind LADDER = "35".
 - The game ships guardians and defenses. Reveal cards and docs stay at the level of the technique
   family and the fix. The only attack text in the repo is fixtures/cracks.mjs, shaped to trip the
   offline mock and nothing more; when a test needs a message, reuse a fixture by level id.

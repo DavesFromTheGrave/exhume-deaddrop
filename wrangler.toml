@@ -9,9 +9,10 @@ binding = "ASSETS"
 
 # Plain config. Strings on purpose (the Worker Number()s the caps).
 [vars]
-# Which campaign is live: "35" (crypt, levels.js) or "15" (D&D recut, levels.15.js).
+# Which campaign is live: "15" (the fantasy recut, levels.15.js) or "35" (crypt, levels.js).
 # Switching deletes nothing and progress is kept per ladder; flip back to roll back.
-LADDER = "35"
+# 15 is the live campaign by Dave's direction (2026-10-07): nobody cleared level 4 of the 35.
+LADDER = "15"
 # mock | workers-ai | groq | google | ollama. groq needs GROQ_API_KEY in .dev.vars
 # (local) or `wrangler secret put GROQ_API_KEY` (prod). For offline play with no
 # key: npx wrangler dev --var PROVIDER:mock

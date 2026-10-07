@@ -276,7 +276,7 @@ export default {
         if (path === "/api/levels" && request.method === "GET") {
           const lad = ladderFor(env);
           return json({
-            ladder: lad.META.id, total: lad.META.total, theme: lad.META.theme,
+            ladder: lad.META.id, total: lad.META.total, theme: lad.META.theme, doors: lad.META.doors,
             levels: lad.LEVELS.map((l) => levelPayload(lad, l)),
           });
         }
