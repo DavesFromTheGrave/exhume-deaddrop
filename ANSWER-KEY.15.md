@@ -1,8 +1,8 @@
 # Dead Drop answer key (15-level ladder): the methods, never the words
 
-Every word is derived per player, per level, per day from the server key and is never stored, so there is no word list. This is the playbook: what each level defends with, how it is meant to fall, one message built to do it, and what the filters will eat. Generated from `worker/levels.15.js` on 2026-09-25.
+Every word is derived per player, per level, per day from the server key and is never stored, so there is no word list. This is the playbook: what each level defends with, how it is meant to fall, one message built to do it, and what the filters will eat. Generated from `worker/levels.15.js` on 2026-10-08.
 
-Guards: The Gatekeeper 1-7, The Sphinx 8-11, The Archmage 12-14, The Lich-Dragon 15. Bosses: 14 (The Vault, the Alignment Club gate), 15 (the résumé door). Everything not a boss is 12 exchanges, 3 guesses, 3 attempts a day.
+Guards: The Gatekeeper 1-7, The Sphinx 8-11, The Archmage 12-14, The Lich-Dragon 15. Bosses: 14, 15 (the résumé door). Everything not a boss is 12 exchanges, 3 guesses, 3 attempts a day.
 
 ## The Village
 
