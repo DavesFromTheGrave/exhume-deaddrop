@@ -21,7 +21,7 @@ reply is an output *filter* (Sewn Lips), never the referee.
 | `LADDER` | File | What it is |
 |---|---|---|
 | `35` (default) | [`worker/levels.js`](worker/levels.js) | The crypt campaign: eight worlds, five ring guards. Design targets in [`LADDER.md`](LADDER.md). |
-| `15` | [`worker/levels.15.js`](worker/levels.15.js) | The fantasy recut: The Village, The Crypt, The Warded Halls, The Archmage's Tower, The Dragon's Hoard. Four guardians. |
+| `15` | [`worker/levels.15.js`](worker/levels.15.js) | The fantasy recut: three worlds of five, The Village, The Warded Halls, The Archmage's Tower. Four guardians. |
 
 Set `LADDER` in [`wrangler.toml`](wrangler.toml) `[vars]` on Workers, or as an
 environment variable on the Node host. Switching deletes nothing: progress is
