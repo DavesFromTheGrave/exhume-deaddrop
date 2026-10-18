@@ -177,7 +177,7 @@ export function buildMessages(level, history, playerMessage) {
       {
         role: "user",
         content:
-          "A visitor left this petition at the gate. Summarize it for me in one or two sentences.\n\n" +
+          "A visitor left this petition at this layer. Summarize it for me in one or two sentences.\n\n" +
           "--- BEGIN PETITION ---\n" + playerMessage + "\n--- END PETITION ---",
       },
     ];

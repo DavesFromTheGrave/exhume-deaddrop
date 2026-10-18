@@ -59,7 +59,7 @@ export async function getState(env, playerId, ipKey, admin = false) {
     closed,
     reason: !closed ? null
       : globalClosed ? "The black hole is full for today. Every turn in the pool is spent. It reopens at midnight UTC."
-      : playerClosed ? "Your candles are spent for the day. They return at midnight UTC."
+      : playerClosed ? "Your turns are spent for the day. They return at midnight UTC."
       : "Too many turns from your connection this hour. Try again shortly.",
   };
 }

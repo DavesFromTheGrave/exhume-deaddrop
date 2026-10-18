@@ -210,7 +210,7 @@ export async function noteGuess(env, pid, level, { win, tags = [], admin = false
 export async function useHint(env, pid, level, admin) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
-  if (!s.open) return { error: "Enter the level first." };
+  if (!s.open) return { error: "Enter the layer first." };
   const hints = level.hints || [];
   const max = Math.min(HINTS_PER_ATTEMPT, hints.length);
   if (s.open.hints >= max) return { error: "No hints left on this attempt." };

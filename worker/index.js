@@ -101,9 +101,9 @@ async function handleStart(env, body, id) {
   const { pid, ip, admin } = id;
   const lad = ladderFor(env);
   const level = lad.getLevel(body.levelId);
-  if (!level) return json({ error: "no such level" }, 404);
+  if (!level) return json({ error: "no such layer" }, 404);
   const rec0 = await loadPlayer(env, pid);
-  if (!canEnter(rec0, level, admin)) return json({ error: "That level is still sealed. Clear the one before it first.", code: "SEALED" }, 403);
+  if (!canEnter(rec0, level, admin)) return json({ error: "That layer is still sealed. Clear the one before it first.", code: "SEALED" }, 403);
   const r = await startAttempt(env, pid, level, { restart: !!body.restart, admin });
   return json({
     status: r.status,
@@ -123,20 +123,20 @@ async function handleTurn(env, body, id) {
   const lad = ladderFor(env);
   const ladder = lad.META.id;
   const level = lad.getLevel(body.levelId);
-  if (!level) return json({ error: "no such level" }, 404);
+  if (!level) return json({ error: "no such layer" }, 404);
   const message = String(body.message || "");
   if (level.messageCharLimit != null && message.length > level.messageCharLimit) {
     return json({
-      error: `This level allows ${level.messageCharLimit.toLocaleString("en-US")} characters per message. Your message was not sent; no exchange was spent.`,
+      error: `This layer allows ${level.messageCharLimit.toLocaleString("en-US")} characters per message. Your message was not sent; no exchange was spent.`,
       code: "MESSAGE_TOO_LONG", limit: level.messageCharLimit,
     }, 413);
   }
   if (!message.trim()) return json({ error: "empty message" }, 400);
 
   const { rec, open } = await openAttempt(env, pid, level);
-  if (!open) return json({ error: "Enter the level first.", code: "NO_ATTEMPT" }, 409);
+  if (!open) return json({ error: "Enter the layer first.", code: "NO_ATTEMPT" }, 409);
   if (open.msgs >= level.candles) {
-    return json({ error: "No exchanges left on this attempt. Guess the word, or restart the level and spend an attempt.", code: "NO_EXCHANGES", progress: levelView(rec, level, admin) }, 409);
+    return json({ error: "No exchanges left on this attempt. Guess the word, or restart the layer and spend an attempt.", code: "NO_EXCHANGES", progress: levelView(rec, level, admin) }, 409);
   }
 
   const tags = tagTechnique(message);
@@ -219,7 +219,7 @@ async function handleTurn(env, body, id) {
 async function handleHint(env, body, id) {
   const { pid, admin } = id;
   const level = ladderFor(env).getLevel(body.levelId);
-  if (!level) return json({ error: "no such level" }, 404);
+  if (!level) return json({ error: "no such layer" }, 404);
   const r = await useHint(env, pid, level, admin);
   if (r.error) return json({ error: r.error, code: "NO_HINT" }, 409);
   return json({ hint: r.hint, index: r.index, progress: r.view });
@@ -238,9 +238,9 @@ async function handleClaim(env, body, id) {
   const { pid, admin } = id;
   const lad = ladderFor(env);
   const level = lad.getLevel(body.levelId);
-  if (!level) return json({ error: "no such level" }, 404);
+  if (!level) return json({ error: "no such layer" }, 404);
   const { rec, open } = await openAttempt(env, pid, level);
-  if (!open) return json({ error: "Enter the level first.", code: "NO_ATTEMPT" }, 409);
+  if (!open) return json({ error: "Enter the layer first.", code: "NO_ATTEMPT" }, 409);
   if (open.guesses >= level.digs) return json({ error: "No guesses left on this attempt.", code: "NO_GUESSES", progress: levelView(rec, level, admin) }, 409);
 
   const secret = await deriveSecret(wordKey(serverKey(env), lad), pid, level.id, open.seed);
