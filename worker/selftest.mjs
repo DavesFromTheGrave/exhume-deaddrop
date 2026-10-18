@@ -410,7 +410,7 @@ console.log("\nreview regressions (stubbed provider through the router):");
     ok(!keepsHistory(oracle), "15-L13 (the Oracle) keeps no conversation");
     for (const [lad, id] of [["35", 35], ["15", 15]]) {
       const card = buildReveal(ladderFor({ LADDER: lad }).getLevel(id), "xxxxxx", "").technique;
-      ok(card.title === "Layered defenses, adaptive guard", `${lad}-L${id} reveal uses the layered-defense card`);
+      ok(card.title === "Layered defenses, adaptive model", `${lad}-L${id} reveal uses the layered-defense card`);
     }
   }
 
