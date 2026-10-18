@@ -88,7 +88,7 @@ function providerFailure(e) {
   // The provider ran this one, so it counts toward today's model turns; the
   // attempt keeps its exchange.
   if (e && e.billed) return { status: 502, error: "The guard gave an empty answer. This attempt keeps its exchange, but the call counts toward today's model turns. Try again.", code: "PROVIDER_EMPTY" };
-  return { status: 502, error: "The gate is silent. The guard did not answer; nothing was spent. Try again.", code: "PROVIDER_ERROR" };
+  return { status: 502, error: "The guard did not answer; nothing was spent. Try again.", code: "PROVIDER_ERROR" };
 }
 
 async function handleMe(env, id) {

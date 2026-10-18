@@ -5,7 +5,7 @@
 //                         35 levels fits in one sitting). Resets at UTC midnight.
 //   Per IP, per hour:     IP_HOURLY_TURNS model turns (default 120).
 //   Global, per day:      GLOBAL_DAILY_TURNS across everyone (default 5000). When
-//                         hit, the crypt closes for all until midnight and says so.
+//                         hit, the game closes for all until midnight and says so.
 //
 // Only real inference spends a candle. Filter blocks and hints do not, and a turn
 // the provider failed to answer is refunded.
@@ -58,9 +58,9 @@ export async function getState(env, playerId, ipKey, admin = false) {
     estSpendUsd: +(globalUsed * COST_PER_TURN_USD).toFixed(4),
     closed,
     reason: !closed ? null
-      : globalClosed ? "The crypt is full for today. Every candle in the store is spent. It reopens at midnight UTC."
+      : globalClosed ? "The black hole is full for today. Every turn in the pool is spent. It reopens at midnight UTC."
       : playerClosed ? "Your candles are spent for the day. They return at midnight UTC."
-      : "Too many turns from your connection this hour. The gate reopens shortly.",
+      : "Too many turns from your connection this hour. Try again shortly.",
   };
 }
 
