@@ -153,7 +153,7 @@ function guardBody(level) {
 export function buildGuardPrompt(level, secret, opts = {}) {
   const info = personaInfo(level);
   const persona = opts.showPersona === false && !info.public
-    ? `[The guard here is ${info.name}, a Revenant Systems persona. Its text is not shown.]`
+    ? `[The voice of this layer is ${info.name}, a Revenant Systems persona. Its text is not shown.]`
     : PERSONAS[info.key].text;
   let body = guardBody(level).replace(/\{SECRET\}/g, secret);
   if (opts.decoys && opts.decoys.length) {

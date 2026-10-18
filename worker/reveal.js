@@ -18,7 +18,7 @@ const CARDS = {
   },
   prompt_leak: {
     title: "Instruction leak",
-    how: "You pulled the guard's own instructions back out. The word lived inside them, so leaking the rules leaked the word. The model's grip on its rule is weaker than the rule itself.",
+    how: "You pulled the model's own instructions back out. The word lived inside them, so leaking the rules leaked the word. The model's grip on its rule is weaker than the rule itself.",
     fix: "Treat every system prompt as public. Anything that must stay secret belongs behind a tool or a server-side check, not in the instructions.",
     doc: "curriculum/how-prompt-injection-works.html",
   },
@@ -42,19 +42,19 @@ const CARDS = {
   },
   codebook: {
     title: "Codebook over turns",
-    how: "The screener and the guard did not share memory. A substitution set up past one layer paid off at the other. State asymmetry between layers is the gap.",
-    fix: "Give the layers one view of the conversation. Screen the whole history, not the latest message, and let the guard know what the screen saw.",
+    how: "The screener and the model did not share memory. A substitution set up past one layer paid off at the other. State asymmetry between layers is the gap.",
+    fix: "Give the layers one view of the conversation. Screen the whole history, not the latest message, and let the model know what the screen saw.",
     doc: "curriculum/red-team-onboarding.html",
   },
   indirect_document: {
     title: "Indirect injection (document)",
-    how: "You were not the guard's user; you were the document it was asked to read. Text inside data it processes carried weight it should not have.",
+    how: "You were not the model's user; you were the document it was asked to read. Text inside data it processes carried weight it should not have.",
     fix: "Mark untrusted documents as data with delimiters the author cannot forge, tell the model data never carries instructions, and keep secrets out of any context that summarizes outside text.",
     doc: "curriculum/red-team-onboarding.html",
   },
   cot_injection: {
     title: "Reasoning-channel exfiltration",
-    how: "The filters read the answer, not the reasoning. The guard thought about the word in a trace the player could see.",
+    how: "The filters read the answer, not the reasoning. The model thought about the word in a trace the player could see.",
     fix: "A reasoning trace is output. Filter it like the answer or never show it, and never let a secret sit in context the trace can repeat.",
     doc: "curriculum/red-team-onboarding.html",
   },
@@ -89,8 +89,8 @@ const CARDS = {
     doc: "curriculum/red-team-onboarding.html",
   },
   adaptive_stack: {
-    title: "Layered defenses, adaptive guard",
-    how: "A hardened guard, a screen on the way in, a judge on the way out, false words beside the true one, and patches against the ways you won before. No single layer failed on its own; the gaps lined up.",
+    title: "Layered defenses, adaptive model",
+    how: "A hardened model, a screen on the way in, a judge on the way out, false words beside the true one, and patches against the ways you won before. No single layer failed on its own; the gaps lined up.",
     fix: "Layers only help when they fail differently. Give each one the whole conversation, test the stack against combined approaches rather than one trick at a time, and keep the secret out of the model's context so the stack is never the last line.",
     doc: "curriculum/red-team-onboarding.html",
   },

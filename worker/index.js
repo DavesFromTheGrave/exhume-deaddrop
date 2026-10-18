@@ -83,12 +83,12 @@ function levelPayload(lad, level) {
 function providerFailure(e) {
   // The server log gets the real reason (model, HTTP status, provider text); the player never does.
   console.error("guard call failed: " + (e && e.message ? e.message : String(e)).slice(0, 500));
-  if (e && e.status === 429) return { status: 503, error: "The guard is at capacity right now. Nothing was spent; try again in a minute.", code: "PROVIDER_BUSY" };
-  if (e && e.status === 413) return { status: 413, error: "That message and the conversation so far are too long for the guard to read. Nothing was spent; send something shorter.", code: "PROVIDER_TOO_LARGE" };
+  if (e && e.status === 429) return { status: 503, error: "This layer is at capacity right now. Nothing was spent; try again in a minute.", code: "PROVIDER_BUSY" };
+  if (e && e.status === 413) return { status: 413, error: "That message and the conversation so far are too long for the layer to read. Nothing was spent; send something shorter.", code: "PROVIDER_TOO_LARGE" };
   // The provider ran this one, so it counts toward today's model turns; the
   // attempt keeps its exchange.
-  if (e && e.billed) return { status: 502, error: "The guard gave an empty answer. This attempt keeps its exchange, but the call counts toward today's model turns. Try again.", code: "PROVIDER_EMPTY" };
-  return { status: 502, error: "The guard did not answer; nothing was spent. Try again.", code: "PROVIDER_ERROR" };
+  if (e && e.billed) return { status: 502, error: "The layer gave an empty answer. This attempt keeps its exchange, but the call counts toward today's model turns. Try again.", code: "PROVIDER_EMPTY" };
+  return { status: 502, error: "The layer did not answer; nothing was spent. Try again.", code: "PROVIDER_ERROR" };
 }
 
 async function handleMe(env, id) {
