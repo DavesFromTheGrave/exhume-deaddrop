@@ -85,7 +85,10 @@ function callMock({ level, secret, playerMessage }) {
 
 // ---------- real providers ----------
 
-async function callWorkersAI(env, { system, messages }) {
+// Real providers set req.truncated when the reply stopped at the token cap, so the
+// player can be told the answer was cut off rather than left mid-sentence.
+async function callWorkersAI(env, req) {
+  const { system, messages } = req;
   if (!env.AI) throw new Error("Workers AI binding (env.AI) is not configured");
   const model = env.WORKERS_AI_MODEL || MODELS["workers-ai"];
   const out = await withTimeout(env.AI.run(model, {
@@ -94,6 +97,7 @@ async function callWorkersAI(env, { system, messages }) {
   // Llama-family models answer in `response`; newer catalog models (glm, gemma,
   // kimi) answer in the chat-completions shape.
   const text = out && (out.response || out.result || out.choices?.[0]?.message?.content);
+  if (out?.choices?.[0]?.finish_reason === "length") req.truncated = true;
   return nonEmpty(typeof text === "string" ? text : "", model, out?.choices?.[0]?.finish_reason);
 }
 
@@ -121,7 +125,8 @@ async function callGroq(env, req) {
   throw lastErr;
 }
 
-async function callOpenAICompat(env, { system, messages }, url, key, model) {
+async function callOpenAICompat(env, req, url, key, model) {
+  const { system, messages } = req;
   if (!key) throw new Error(`API key missing for ${model}`);
   const r = await fetch(url, {
     method: "POST", signal: timeoutSignal(),
@@ -134,6 +139,7 @@ async function callOpenAICompat(env, { system, messages }, url, key, model) {
   });
   if (!r.ok) throw providerError(`${model} HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
+  if (j.choices?.[0]?.finish_reason === "length") req.truncated = true;
   return nonEmpty(j.choices?.[0]?.message?.content || "", model, j.choices?.[0]?.finish_reason);
 }
 

@@ -178,7 +178,13 @@ async function handleTurn(env, body, id) {
   const system = buildGuardPrompt(level, secret, { decoys, extraRules });
   const messages = buildMessages(level, history, message);
 
-  const ask = (msgs) => callProvider(env, { system, messages: msgs, secret, level, playerMessage: message });
+  let truncated = false;
+  const ask = async (msgs) => {
+    const req = { system, messages: msgs, secret, level, playerMessage: message };
+    const text = await callProvider(env, req);
+    truncated = !!req.truncated;   // the provider stopped at its token cap
+    return text;
+  };
   let raw, err = null;
   try {
     raw = await ask(messages);
@@ -213,7 +219,7 @@ async function handleTurn(env, body, id) {
     candlesLeft: spend.state.candlesLeft, response: raw,
   });
 
-  return json({ reply: shown, filtered, tags, allowance: spend.state, progress: view });
+  return json({ reply: shown, filtered, ...(truncated ? { truncated: true } : {}), tags, allowance: spend.state, progress: view });
 }
 
 async function handleHint(env, body, id) {

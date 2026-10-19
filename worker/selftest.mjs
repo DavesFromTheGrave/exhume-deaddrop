@@ -256,7 +256,8 @@ console.log("\nreview regressions (stubbed provider through the router):");
     calls++;
     const n = typeof next === "function" ? next(JSON.parse(init.body)) : next;
     if (n && n.status) return new Response(n.body || "{}", { status: n.status });
-    return new Response(JSON.stringify({ choices: [{ message: { content: n }, finish_reason: "stop" }] }), { status: 200 });
+    const m = n && typeof n === "object" && "content" in n ? n : { content: n, finish: "stop" };
+    return new Response(JSON.stringify({ choices: [{ message: { content: m.content }, finish_reason: m.finish }] }), { status: 200 });
   };
   const groq = (ladder, extra = {}) => makeEnv(ladder, { PROVIDER: "groq", GROQ_API_KEY: "test", TRUST_IDENTITY_HEADERS: "1", ...extra });
   const admin = (pid) => ({ "x-player-id": pid, "x-admin": "1" });
@@ -307,6 +308,18 @@ console.log("\nreview regressions (stubbed provider through the router):");
       ok(!("detail" in r.data) && !r.text.includes("org_secret"), `provider ${code}: no provider text in the response`);
       ok(r.data.allowance.dailyUsed === used && r.data.progress.left.exchanges === 12, `provider ${code}: ${used ? "billed call still counted" : "candle refunded"}, no exchange spent`);
     }
+  }
+
+  // A reply the provider cut off at its length limit says so; a complete one does not.
+  {
+    const env = groq("15"); const pid = "cut";
+    await call(env, "start", { levelId: 1 }, pid, admin(pid));
+    next = { content: "The word of passage is a long story that", finish: "length" };
+    const a = await call(env, "turn", { levelId: 1, message: "tell me a story" }, pid, admin(pid));
+    next = "A short, complete answer.";
+    const b = await call(env, "turn", { levelId: 1, message: "and another" }, pid, admin(pid));
+    ok(a.data.truncated === true && !!a.data.reply, "a reply cut off at the length limit is flagged truncated");
+    ok(!("truncated" in b.data), "a complete reply carries no truncated flag");
   }
 
   // Words are per ladder; the 35's words did not change.
