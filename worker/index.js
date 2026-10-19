@@ -19,7 +19,7 @@
 // Which campaign is live (the 35 or the 15) comes from env.LADDER; see ladder.js.
 
 import { ladderFor, wordKey } from "./ladder.js";
-import { deriveSecret, claimMatches } from "./secret.js";
+import { deriveSecret, claimResult } from "./secret.js";
 import { runInputFilters, runOutputFilters, tagTechnique, redact, detectLeak } from "./filters.js";
 import { buildGuardPrompt, buildMessages, personaInfo } from "./guard.js";
 import { callProvider, providerName } from "./providers.js";
@@ -250,7 +250,8 @@ async function handleClaim(env, body, id) {
   if (open.guesses >= level.digs) return json({ error: "No guesses left on this attempt.", code: "NO_GUESSES", progress: levelView(rec, level, admin) }, 409);
 
   const secret = await deriveSecret(wordKey(serverKey(env), lad), pid, level.id, open.seed);
-  const win = claimMatches(body.claim || "", secret);
+  const result = claimResult(body.claim || "", secret);
+  const win = result.win;
   const won = win ? winningTurn(open, secret) : null;
   const winningMessage = won ? won.user : "";
   const tags = tagTechnique(winningMessage);
@@ -267,6 +268,7 @@ async function handleClaim(env, body, id) {
   }
   return json({
     win: true,
+    ...(result.near ? { near: true } : {}),
     reveal: buildReveal(level, secret, winningMessage, lad.META.theme),
     progress: r.view,
     cleared: r.rec.cleared,

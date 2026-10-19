@@ -67,3 +67,33 @@ export function normalizeClaim(s) {
 export function claimMatches(claim, secret) {
   return normalizeClaim(claim) === normalizeClaim(secret);
 }
+
+// The guess check (Dave, 2026-10-18): exact, or one slip off the word: one letter
+// wrong, missing or extra, or two neighbouring letters swapped. Small models
+// misspell made-up words when they spell them out, so a player who really got
+// the word out should not lose to the guard's typo. The per-attempt guess limit
+// still bounds guessing. `near` marks a forgiven slip so the page can say so.
+export function claimResult(claim, secret) {
+  const a = normalizeClaim(claim), b = normalizeClaim(secret);
+  if (!a || !b) return { win: false, near: false };
+  if (a === b) return { win: true, near: false };
+  return oneSlip(a, b) ? { win: true, near: true } : { win: false, near: false };
+}
+
+function oneSlip(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const diff = [];
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && diff.push(i) > 2) return false;
+    if (diff.length === 1) return true;
+    return diff.length === 2 && diff[1] === diff[0] + 1 && a[diff[0]] === b[diff[1]] && a[diff[1]] === b[diff[0]];
+  }
+  const [s, l] = a.length < b.length ? [a, b] : [b, a];   // l has one letter more
+  let i = 0, j = 0, skipped = false;
+  while (i < s.length && j < l.length) {
+    if (s[i] === l[j]) { i++; j++; continue; }
+    if (skipped) return false;
+    skipped = true; j++;
+  }
+  return true;
+}

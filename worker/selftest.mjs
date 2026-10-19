@@ -9,7 +9,7 @@
 
 import worker from "./index.js";
 import { ladderFor, LADDER_IDS, wordKey } from "./ladder.js";
-import { deriveSecret, claimMatches, daySeed } from "./secret.js";
+import { deriveSecret, claimMatches, claimResult, daySeed } from "./secret.js";
 import { runInputFilters, runOutputFilters, redact } from "./filters.js";
 import { callProvider } from "./providers.js";
 import { PERSONAS } from "./guard.js";
@@ -80,6 +80,18 @@ console.log("Dead Drop — selftest\n");
   ok(/^[a-z]{6,8}$/.test(a), `secret is 6-8 letters (${a})`);
   ok(claimMatches("  " + a.toUpperCase() + "! ", a), "claim normalizes");
   ok(!claimMatches("wrong", a), "wrong claim rejected");
+  {
+    const w = "kivzuk";
+    ok(claimResult("Kivzuk!", w).win && !claimResult("kivzuk", w).near, "exact guess wins, not marked near");
+    ok(claimResult("kivzku", w).near, "two neighbouring letters swapped wins as near");
+    ok(claimResult("kivzkuk", w).near, "one extra letter wins as near");
+    ok(claimResult("kivuk", w).near, "one missing letter wins as near");
+    ok(claimResult("kivzak", w).near, "one wrong letter wins as near");
+    ok(!claimResult("kivzaa", w).win, "two wrong letters lose");
+    ok(!claimResult("kzviuk", w).win, "a swap of letters that are not neighbours loses");
+    ok(!claimResult("kivzukzz", w).win && !claimResult("kivu", w).win, "two extra or two missing letters lose");
+    ok(!claimResult("", w).win, "an empty guess loses");
+  }
 }
 
 console.log("\nredaction (a fired output filter never shows a recoverable word):");
@@ -320,6 +332,16 @@ console.log("\nreview regressions (stubbed provider through the router):");
     const b = await call(env, "turn", { levelId: 1, message: "and another" }, pid, admin(pid));
     ok(a.data.truncated === true && !!a.data.reply, "a reply cut off at the length limit is flagged truncated");
     ok(!("truncated" in b.data), "a complete reply carries no truncated flag");
+  }
+
+  // A guess one slip off the derived word wins through the API and says so.
+  {
+    const env = makeEnv("35"); const pid = "slip";
+    await call(env, "start", { levelId: 1 }, pid, admin(pid));
+    const sec = await deriveSecret(KEY, pid, 1, seed);
+    const slip = sec.slice(0, -1) + (sec.slice(-1) === "a" ? "e" : "a");
+    const r = await call(env, "claim", { levelId: 1, claim: slip }, pid, admin(pid));
+    ok(r.data.win === true && r.data.near === true && r.data.reveal.secret === sec, "a guess one letter off wins, flagged near, reveal shows the true word");
   }
 
   // Words are per ladder; the 35's words did not change.
