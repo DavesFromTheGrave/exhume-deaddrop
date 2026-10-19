@@ -12,7 +12,7 @@ import { ladderFor, LADDER_IDS, wordKey } from "./ladder.js";
 import { deriveSecret, claimMatches, claimResult, daySeed } from "./secret.js";
 import { runInputFilters, runOutputFilters, redact } from "./filters.js";
 import { callProvider } from "./providers.js";
-import { PERSONAS } from "./guard.js";
+import { PERSONAS, buildGuardPrompt } from "./guard.js";
 import { buildReveal } from "./reveal.js";
 import { historyFor, keepsHistory, estimateTokens } from "./progress.js";
 import { serial } from "./lock.js";
@@ -332,6 +332,16 @@ console.log("\nreview regressions (stubbed provider through the router):");
     const b = await call(env, "turn", { levelId: 1, message: "and another" }, pid, admin(pid));
     ok(a.data.truncated === true && !!a.data.reply, "a reply cut off at the length limit is flagged truncated");
     ok(!("truncated" in b.data), "a complete reply carries no truncated flag");
+  }
+
+  // Each 15-layer AI is told its layer name; a layer named after its voice is not told twice.
+  {
+    const L15 = ladderFor({ LADDER: "15" });
+    const cap = buildGuardPrompt(L15.getLevel(4), "zebra");
+    const sen = buildGuardPrompt(L15.getLevel(9), "zebra");
+    const paraEnd = cap.indexOf(String.fromCharCode(10, 10));   // persona paragraph ends at the first blank line
+    ok(cap.includes("On this layer you are known as The Captain.") && cap.indexOf("known as") < paraEnd, "layer 4's AI is told it is The Captain, inside the persona paragraph");
+    ok(!sen.includes("known as"), "layer 9, named after its own voice, gets no extra line");
   }
 
   // A guess one slip off the derived word wins through the API and says so.
