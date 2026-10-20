@@ -19,7 +19,8 @@ GitHub does not exist for it. Push both repos before starting one.
 - **`public/` client** reads its copy from `META.theme` via `/api/levels`, and
   its counters, transcript, locks and hints from the server.
 - **Selftest** covers both ladders end to end through the router, plus the word
-  staying server-side. `npm test` runs it and the message-limit tests.
+  staying server-side. `npm test` runs it, the message-limit tests and the
+  provider tests (`worker/providers.test.mjs`).
 - **Provider**: `PROVIDER = "groq"`, `GROQ_MODEL = "openai/gpt-oss-20b"` in
   `wrangler.toml`. The old handoff's picks are gone: Groq retired
   `llama-3.1-8b-instant` for free accounts on 2026-08-16, and Workers AI retired
@@ -86,6 +87,14 @@ A second review of those fixes (16 confirmed) then changed:
 - Client: a retry after a lost response is always a plain start, never a second
   restart; network errors say the request may or may not have landed and offer
   a re-enter; a refused turn keeps its bubble if a draft was typed.
+
+Copilot's review of the merged PR #1 then changed:
+
+- A timed-out Workers AI call is cancelled through the binding's AbortSignal, as
+  fetch already cancelled the other providers. The old `Promise.race` gave up at
+  25 s while the call kept running, so the candle was refunded and the player's
+  lock released under a live call. `worker/providers.test.mjs` checks the timeout
+  for every real provider on a hand-fired clock, through the router.
 
 ## Not done: pick up here
 

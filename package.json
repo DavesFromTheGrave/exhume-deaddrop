@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node worker/selftest.mjs && node --test worker/message-limits.test.mjs"
+    "test": "node worker/selftest.mjs && node --test worker/message-limits.test.mjs worker/providers.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.129.1"
