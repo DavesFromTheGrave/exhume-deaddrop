@@ -107,6 +107,14 @@ Copilot's review of the merged PR #1 then changed:
   oversized turn was kept whole in the player record (a provider with a large
   context, or the mock, answers it). Nothing over 14,000 characters is ever
   replayed, so the guard is sent the same; the attempt log keeps the whole text.
+- A guess whose response was lost can be sent again safely. The client sends a
+  `claimId` with each guess and reuses it for that guess (the new "Send the guess
+  again" offer, or the same guess from the box). The server answers a repeated
+  `claimId` as it did the first time, from the miss in the open attempt or from
+  the level's `lastClaim` (the guess that closed the attempt), so nothing counts
+  twice and a win sends its reveal again, even after a re-enter opened a new
+  attempt. Before, the resend got "Enter the level first." and the offered
+  re-enter opened a new attempt, so the reveal was lost.
 
 ## Not done: pick up here
 
@@ -116,7 +124,10 @@ Copilot's review of the merged PR #1 then changed:
    `WORLD_NAMES` (maps worlds by index, so The Village would display as a crypt
    name), the seal geometry, and the stage thresholds at 15 and 25. It needs to
    read `total`, `theme` and world names from `/api/levels`. The GitHub copy of
-   that repo is older than Dave's local one, so push it first.
+   that repo is older than Dave's local one, so push it first. It should also
+   send a `claimId` with each guess and reuse it when it re-sends one (see
+   `sendClaim` in `public/app.js`); until then its players keep the old behaviour
+   when a claim response is lost.
 3. **Node host**: confirm `server.mjs` passes `env.STORE` (it should, per
    `store.js`). If it does not, add `TRUST_IDENTITY_HEADERS: "1"` to its env, or
    cookie identity stops being honoured.

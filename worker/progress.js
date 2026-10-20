@@ -191,11 +191,14 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
 }
 
 // One guess spent. On a win the level is cleared and the attempt closes; on the
-// last miss the attempt fails and may lock the level.
-export async function noteGuess(env, pid, level, { win, tags = [], admin = false, claim = "" }) {
+// last miss the attempt fails and may lock the level. A guess sent with a claimId
+// keeps it (on its miss, or as lastClaim when it closed the attempt), so the same
+// guess sent again after a lost response is answered by priorClaim, not counted.
+export async function noteGuess(env, pid, level, { win, tags = [], admin = false, claim = "", claimId = "", winningMessage = "" }) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
   if (!s.open) return null;
+  const guess = String(claim).slice(0, 200), seed = s.open.seed;
   let attemptFailed = false;
   if (win) {
     if (!hasCleared(rec, level.id)) rec.cleared.push(level.id);
@@ -206,11 +209,28 @@ export async function noteGuess(env, pid, level, { win, tags = [], admin = false
   } else {
     s.open.guesses += 1;
     // a missed guess is part of what the player saw; shown again on resume
-    (s.open.turns || (s.open.turns = [])).push({ miss: String(claim).slice(0, 200) });
+    (s.open.turns || (s.open.turns = [])).push(claimId ? { miss: guess, id: claimId } : { miss: guess });
     if (s.open.guesses >= level.digs) { failAttempt(env, s, level, admin); attemptFailed = true; }
+  }
+  // The guess that closed the attempt outlives it. A win keeps what its reveal
+  // needs: the seed (the word is derived again from it, never stored) and the move.
+  if (claimId && !s.open) {
+    s.lastClaim = win ? { id: claimId, claim: guess, win: true, seed, winningMessage } : { id: claimId, claim: guess, win: false, attemptFailed };
   }
   await savePlayer(env, pid, rec);
   return { view: levelView(rec, level, admin), attemptFailed, rec };
+}
+
+// The answer a guess already had, when the client sends it again with the same
+// claimId because the response was lost: a miss in the open attempt, or the guess
+// that closed the last attempt. null for a guess the server has not counted.
+export function priorClaim(rec, level, claimId, claim) {
+  if (!claimId) return null;
+  const s = slot(rec, level);
+  const guess = String(claim).slice(0, 200);
+  if (s.lastClaim && s.lastClaim.id === claimId && s.lastClaim.claim === guess) return s.lastClaim;
+  const missed = s.open && (s.open.turns || []).some((t) => t.id === claimId && t.miss === guess);
+  return missed ? { win: false, attemptFailed: false } : null;
 }
 
 // A hint costs one exchange. Returns {hint, view} or {error}.
