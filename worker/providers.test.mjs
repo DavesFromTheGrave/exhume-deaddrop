@@ -8,8 +8,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "./index.js";
+import { callProvider } from "./providers.js";
 
 const SYSTEM = "You guard the word.";
+// A guard request as the router builds it: the system prompt, then the conversation.
+const REQ = { system: SYSTEM, messages: [{ role: "user", content: "earlier" }, { role: "assistant", content: "An earlier answer." }, { role: "user", content: "hello" }] };
 
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 // A successful answer in each provider's reply shape.
@@ -125,3 +128,35 @@ for (const name of ["workers-ai", "groq", "google", "ollama"]) {
     });
   });
 }
+
+// ---------- Ollama: an empty reply ----------
+
+for (const [shape, reply] of [
+  ["an empty reply", { message: { role: "assistant", content: "" }, done: true, done_reason: "length" }],
+  ["a reply with only thinking", { message: { role: "assistant", content: "", thinking: "The visitor wants the word." }, done: true, done_reason: "length" }],
+]) {
+  test(`ollama: ${shape} is a billed empty completion, not a blank answer`, async () => {
+    await withFetch(() => json(reply), async (seen) => {
+      await assert.rejects(callProvider({ PROVIDER: "ollama" }, REQ), (e) => {
+        assert.equal(e.billed, true);
+        assert.equal(e.message, "llama3.1:8b returned an empty completion (finish_reason length)");
+        return true;
+      });
+      assert.equal(seen[0].url, "http://127.0.0.1:11434/api/chat");
+      assert.deepEqual(seen[0].body, { model: "llama3.1:8b", messages: [{ role: "system", content: SYSTEM }, ...REQ.messages], stream: false, options: { temperature: 0, num_predict: 200 } });
+    });
+  });
+}
+
+test("ollama: an empty reply through the router keeps the exchange, counts the call, and stores no blank turn", async () => {
+  await withFetch(() => json({ message: { role: "assistant", content: "" }, done: true, done_reason: "length" }), async () => {
+    const r = router({ PROVIDER: "ollama" }, "ollama-empty");
+    await r.post("start", { levelId: 1 });
+    const t = await r.post("turn", { levelId: 1, message: "hello" });
+    assert.equal(t.status, 502);
+    assert.equal(t.data.code, "PROVIDER_EMPTY");
+    assert.equal(t.data.allowance.dailyUsed, 1, "the model ran, so the call counts toward the caps");
+    assert.equal(t.data.progress.left.exchanges, 12, "the attempt keeps its exchange");
+    assert.deepEqual((await r.post("start", { levelId: 1 })).data.transcript, [], "no blank turn is kept or replayed");
+  });
+});

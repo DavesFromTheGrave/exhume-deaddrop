@@ -197,11 +197,12 @@ async function callGoogle(env, { system, messages }) {
 }
 
 async function callOllama(env, { system, messages }) {
+  const model = env.OLLAMA_MODEL || MODELS.ollama;
   const r = await fetch((env.OLLAMA_URL || "http://127.0.0.1:11434") + "/api/chat", {
     method: "POST", signal: timeoutSignal(), headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: env.OLLAMA_MODEL || MODELS.ollama, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
+    body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
   });
   if (!r.ok) throw providerError(`ollama HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
-  return j.message?.content || "";
+  return nonEmpty(j.message?.content || "", model, j.done_reason);
 }

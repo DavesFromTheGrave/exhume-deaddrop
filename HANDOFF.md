@@ -95,6 +95,9 @@ Copilot's review of the merged PR #1 then changed:
   25 s while the call kept running, so the candle was refunded and the player's
   lock released under a live call. `worker/providers.test.mjs` checks the timeout
   for every real provider on a hand-fired clock, through the router.
+- An empty Ollama reply is an empty completion like the other providers' (the
+  exchange is kept, the call counts toward the caps); it used to be a 200 with a
+  blank answer that spent the exchange and was stored as a turn.
 
 ## Not done: pick up here
 
