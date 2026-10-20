@@ -18,9 +18,10 @@
 //   - the conversation lives here, in the open attempt, not in the browser: the
 //     client cannot add, edit or forge turns, and only turns that passed the input
 //     filters are replayed to the guard. Each exchange is kept as the player saw it
-//     (a blocked message, a withheld reply, or an answer), so a resume shows the
-//     same chat. A reply the player earned can hold the word; it is stored only
-//     while the attempt is open and dropped when the attempt closes.
+//     (a blocked message, a withheld reply, or an answer; at most 20,000 characters
+//     of each message and reply), so a resume shows the same chat. A reply the
+//     player earned can hold the word; it is stored only while the attempt is open
+//     and dropped when the attempt closes.
 
 import { getStore } from "./store.js";
 import { daySeed } from "./secret.js";
@@ -29,6 +30,12 @@ import { ladderFor, ladderId, DEFAULT_LADDER } from "./ladder.js";
 const HINTS_PER_ATTEMPT = 2;
 const WINS_REMEMBERED = 8;
 const TRANSCRIPT_MAX_CHARS = 60000;   // what a resume can show; oldest turns drop first
+// The most kept of one message or reply. Levels 1-4 take messages of any length,
+// and one oversized turn would otherwise be kept whole. estimateTokens counts at
+// least a token per 3.5 characters, so nothing over 14,000 characters is ever
+// replayed to the guard, and no provider's reply budget comes near this; the cut
+// trims only text nothing reads back, and one turn always fits the transcript.
+const TURN_FIELD_MAX_CHARS = 20000;
 // What is replayed to the guard. Groq's free tier caps one request at about 8,000
 // tokens including the reply budget; ~4,000 estimated tokens of history leaves
 // room for the guard prompt, the message and the reply. A request that is still
@@ -170,8 +177,8 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
   s.open.msgs += 1;
   if (turn) {
     const turns = s.open.turns || (s.open.turns = []);
-    const t = { user: String(turn.user) };
-    if (turn.assistant != null) t.assistant = String(turn.assistant);
+    const t = { user: String(turn.user).slice(0, TURN_FIELD_MAX_CHARS) };
+    if (turn.assistant != null) t.assistant = String(turn.assistant).slice(0, TURN_FIELD_MAX_CHARS);
     if (turn.filtered) t.filtered = turn.filtered;
     if (turn.blocked) t.blocked = turn.blocked;
     turns.push(t);

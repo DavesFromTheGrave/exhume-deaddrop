@@ -19,8 +19,9 @@ GitHub does not exist for it. Push both repos before starting one.
 - **`public/` client** reads its copy from `META.theme` via `/api/levels`, and
   its counters, transcript, locks and hints from the server.
 - **Selftest** covers both ladders end to end through the router, plus the word
-  staying server-side. `npm test` runs it, the message-limit tests and the
-  provider tests (`worker/providers.test.mjs`).
+  staying server-side. `npm test` runs it, the message-limit tests, the provider
+  tests (`worker/providers.test.mjs`) and the progress tests
+  (`worker/progress.test.mjs`).
 - **Provider**: `PROVIDER = "groq"`, `GROQ_MODEL = "openai/gpt-oss-20b"` in
   `wrangler.toml`. The old handoff's picks are gone: Groq retired
   `llama-3.1-8b-instant` for free accounts on 2026-08-16, and Workers AI retired
@@ -101,6 +102,11 @@ Copilot's review of the merged PR #1 then changed:
 - The provider tests also cover both Workers AI reply shapes (Llama `response`,
   chat-completions `choices`) with the empty and finish-reason path, and the
   Gemini request body for each model family (2.5 Flash, 3, 2.5 Pro, other).
+- Each stored message and reply is cut at 20,000 characters. Levels 1-4 take
+  messages of any length, and the transcript only drops older turns, so one
+  oversized turn was kept whole in the player record (a provider with a large
+  context, or the mock, answers it). Nothing over 14,000 characters is ever
+  replayed, so the guard is sent the same; the attempt log keeps the whole text.
 
 ## Not done: pick up here
 
