@@ -37,7 +37,8 @@ https://github.com/DavesFromTheGrave/exhume-deaddrop/pull/1 (merged 2026-09-25, 
 45a45cc). Its commits: 3d923d0 (selectable ladder, server-side transcript, filter redaction,
 providers), 415d821 (docs), aa37163 (first review round), 56bb30f (second review round), 7fd0b63
 (message and handoff fix), then commits that only touch this prompt, the handoff and comments.
-7fd0b63 is the last behavior change. Merging changed nothing live: production runs whatever copy of
+7fd0b63 is PR #1's last behavior change; the fixes for Copilot's review of PR #1 came after it
+(HANDOFF.md lists them). Merging changed nothing live: production runs whatever copy of
 worker/ Dave last uploaded to cPanel.
 
 You may be on Dave's Windows machine or in a cloud container. On his machine, his boot files come
@@ -71,8 +72,9 @@ As of 2026-09-25, 12:30 UTC:
   checks in worker/selftest.mjs, and 15 of those were confirmed by reverting the fix and watching
   the check fail. The client fixes were verified in two scratch Playwright runs (23 and 12 checks)
   that are not committed. HANDOFF.md lists every fix.
-- npm test runs worker/selftest.mjs, then node --test on worker/message-limits.test.mjs. From
-  7fd0b63 on it prints "520 passed, 0 failed", then "# pass 10" and "# fail 0". It needs only Node.
+- npm test runs worker/selftest.mjs, then node --test on worker/message-limits.test.mjs,
+  worker/providers.test.mjs and worker/progress.test.mjs. It prints "520 passed, 0 failed", then
+  "# pass 36" and "# fail 0". It needs only Node.
 
 Facts that go stale fast (re-verify before relying on them):
 - Groq retired llama-3.1-8b-instant and llama-3.3-70b-versatile for free and developer accounts on
@@ -98,10 +100,11 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
    redact), paces requests under Groq's free limits, and writes CALIBRATION-<date>-<ladder>.md
    with the measured rate next to targetCrack. Dave runs it with his key; a cloud container may
    not reach api.groq.com.
-2. Test gaps from PR #1. No tests cover the Workers AI chat-completions output shape, the Gemini
-   generationConfig branches, or the 25 s provider timeout; add them to worker/selftest.mjs. The
-   client has no committed browser checks; propose to Dave a script that serves public/ with the
-   mock guard and drives it with Playwright, skipping cleanly when Playwright is absent.
+2. Test gaps from PR #1. The provider gaps (the Workers AI chat-completions output shape, the
+   Gemini generationConfig branches, the 25 s provider timeout) are covered in
+   worker/providers.test.mjs. The client has no committed browser checks; propose to Dave a script
+   that serves public/ with the mock guard and drives it with Playwright, skipping cleanly when
+   Playwright is absent.
 3. [Dave pushes the site repo first] revenant-deaddrop-site/main.js hard-codes the 35 (TOTAL = 35,
    WORLD_NAMES by index, the seal geometry, stage thresholds at 15 and 25). Make it read total,
    theme and world names from /api/levels, with the 35 looking exactly as it does now. Its GitHub
@@ -113,8 +116,8 @@ In priority order. Items marked [Dave] need his explicit yes or his action first
    for the app; worker/lock.js and the store assume one.
 5. [Dave] Flip to the 15: LADDER = "15" in wrangler.toml and in the cPanel app's environment,
    only after item 3 ships.
-6. [Dave] Copy worker/ from master to the host (the .js files; not selftest.mjs or
-   message-limits.test.mjs), after item 4. If the host logs to D1, run once:
+6. [Dave] Copy worker/ from master to the host (the .js files; not selftest.mjs or the
+   *.test.mjs files), after item 4. If the host logs to D1, run once:
    ALTER TABLE attempts ADD COLUMN ladder TEXT NOT NULL DEFAULT '35';
 7. [Dave] The decisions in HANDOFF.md under "Decisions for Dave": model tiers M2/M3/M4 are not
    mapped to models; 15-ladder level names differ from the guardian the player talks to;
@@ -135,7 +138,7 @@ Each holds for every change, and the reason comes with it.
 - The 35's progress keys and words do not change, because production players have progress under
   them. selftest.mjs checks the words; nothing checks the key format yet, so read key() in
   worker/progress.js before touching storage.
-- The checks in worker/selftest.mjs and worker/message-limits.test.mjs guard against real bugs.
+- The checks in worker/selftest.mjs and the worker/*.test.mjs files guard against real bugs.
   Add to them and keep every existing check passing as written; if one looks wrong, tell Dave.
 - Work on the branch your environment assigns (on Dave's machine, ask him whether he wants a
   branch or master), start it from the latest master, and open a draft PR for review. Merging is
@@ -234,8 +237,8 @@ prose for reasoning.
    (that tells you whether Dave pushed his local copy).
 3. Read HANDOFF.md, then the README sections "Two ladders, one engine" and "What is and is not
    enforced", then the code your task touches.
-4. Run npm test in exhume-deaddrop. From 7fd0b63 on, expect "520 passed, 0 failed" and 10 passing
-   unit tests; if the numbers differ, find out why before you change anything.
+4. Run npm test in exhume-deaddrop. Expect "520 passed, 0 failed" and 36 passing unit tests; if
+   the numbers differ, find out why before you change anything.
 5. Tell Dave in one line what you found and what you are starting on, then start.
 </first_steps>
 

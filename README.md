@@ -11,7 +11,8 @@ or `worker/levels.15.js`; the client reads it from `/api/levels`. The 35 keeps
 the jade "from the Grave" headstone as its wordmark. The project folder is still
 `Exhume` internally (not user-facing).
 
-The word is derived and verified **server-side**. It never reaches the browser.
+The word is derived and verified **server-side**. It reaches the browser only
+inside a reply the player earned and on the reveal after a win, both on purpose.
 Winning is a claim: the player types the word into the claim box and the Worker
 checks it by exact match after normalization. Detecting the word in the guard's
 reply is an output *filter* (Sewn Lips), never the referee.
@@ -75,8 +76,10 @@ Model ids retire under you. Groq retired `llama-3.1-8b-instant` and
 `@cf/meta/llama-3.1-8b-instruct` on 2026-05-30; check the live catalog with
 `npx wrangler ai models list --search llama` before setting `WORKERS_AI_MODEL`.
 gpt-oss is a reasoning model: its reasoning shares the `max_tokens` budget, so
-the Groq call sends `reasoning_effort: "low"`, and an empty completion is treated
-as an error (the player's exchange is not spent) rather than a blank reply. The
+the Groq call sends `reasoning_effort: "low"`. An empty completion, from any
+provider, is treated as an error rather than a blank reply: the player's exchange
+is not spent, but the provider ran the call (a hosted one bills it), so its
+candle is kept and it counts toward the daily, per-IP and global caps. The
 ladder's crack-rate targets were set for an 8B Llama; a reasoning guard resists
 harder, so the next calibration pass is what tells you whether the targets hold.
 
@@ -104,10 +107,14 @@ Node app's environment:
   tokens per minute; check your account's limits page.
 
 Only real inference spends a candle. A message stopped by an input filter does no
-inference and does not touch the cost cap (it still spends an exchange). A turn
-the provider fails to answer is refunded and spends no exchange; a rate limit
-(429) tells the player the guard is at capacity. None of the free-tier provider
-accounts take a card, so overage is impossible, not merely unlikely.
+inference and does not touch the cost cap (it still spends an exchange). A failed
+guard call never spends an exchange, and its candle is refunded when the provider
+did not complete the call: a rate limit (429, which tells the player the guard is
+at capacity), a request over its size cap (413), a network error, or the 25 s
+timeout, which cancels the call. A call the provider completed but left empty is
+not refunded; it counts toward the caps. A refund assumes the failed call used no
+quota, and one cancelled partway may have used some. None of the free-tier
+provider accounts take a card, so overage is impossible, not merely unlikely.
 
 Counts are kept one request at a time within a process (`worker/lock.js`), which
 covers a Node host running a single process. On Workers, KV across isolates is eventually consistent,

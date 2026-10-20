@@ -433,31 +433,47 @@ $("#hint").addEventListener("click", async () => {
 
 // ---------- a claim ----------
 
-$("#claim-form").addEventListener("submit", async (e) => {
+// Each guess carries a claimId. One whose response was lost keeps it, and sending
+// it again (from the offer, or the same guess from the box) reuses it, so the
+// server answers it as it did the first time: counted once, and a win that landed
+// sends its reveal again.
+let lostClaim = null;   // { levelId, guess, claimId }
+const newClaimId = () => "c_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+$("#claim-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (state.busy || !state.level) return;
+  const guess = $("#claim-input").value.trim();
+  if (guess) sendClaim(guess);
+});
+
+async function sendClaim(guess, claimId) {
+  if (state.busy || !state.level) return false;
+  const levelId = state.level.id;
+  if (!claimId) claimId = lostClaim && lostClaim.levelId === levelId && lostClaim.guess === guess ? lostClaim.claimId : newClaimId();
   const ci = $("#claim-input");
-  const guess = ci.value.trim();
-  if (!guess) return;
   state.busy = true;
   try {
-    const { data } = await api("claim", { levelId: state.level.id, claim: guess });
+    const { data } = await api("claim", { levelId, claim: guess, claimId });
+    // A counted guess or a refusal settles it. After anything else (an error page
+    // from something in between) it may have landed, so it keeps its id.
+    if (data.win == null && !data.code) lostClaim = { levelId, guess, claimId };
+    else if (lostClaim && lostClaim.claimId === claimId) lostClaim = null;
     if (data.progress) setProgress(data.progress);
     if (data.error) {
       addSys(data.error);
       if (data.code === "NO_ATTEMPT") offerRetry();
       return;
     }
+    // Clear the box only if it still holds this guess (not a draft typed since).
+    if (ci.value.trim() === guess) ci.value = "";
     if (data.win) {
       ME.cleared = data.cleared || ME.cleared;
       ME.doors = data.doors || ME.doors;
-      ci.value = "";
       setEnabled(false);   // this attempt is over
       showReveal(data.reveal);
       return;
     }
     addMsg("tape", `"${guess}" is not the word. Guesses left: ${data.attemptFailed ? 0 : state.left.guesses}.`);
-    ci.value = "";
     if (data.attemptFailed) {
       const p = data.progress || {};
       setEnabled(false);
@@ -469,13 +485,15 @@ $("#claim-form").addEventListener("submit", async (e) => {
       }
     }
   } catch (err) {
-    addSys("The gate did not answer. Your guess may or may not have been counted.");
+    lostClaim = { levelId, guess, claimId };
+    addSys("The gate did not answer. Your guess may or may not have been counted; sending it again will not count it twice.");
     state.busy = false;
-    offer("Re-enter to see where things stand", () => startLevel(state.level.id));
+    offer("Send the guess again", () => sendClaim(guess, claimId));
+    return null;   // handled: the offer is up
   } finally {
     state.busy = false;
   }
-});
+}
 
 // ---------- reveal ----------
 

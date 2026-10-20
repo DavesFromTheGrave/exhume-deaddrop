@@ -1,13 +1,18 @@
 // secret.js — the guarded word.
 //
-// The word is DERIVED, never stored and never sent to the browser. It is an
-// HMAC of (serverKey, sessionId, levelId, daySeed) mapped to a pronounceable
-// nonsense word. Verification recomputes it, so there is nothing to steal from
-// the client and no word list in any database. (The only stored copies are replies
-// a player earned: in their open attempt, and in the attempt log.) Every ladder
-// but the 35 derives under its own key (ladder.js wordKey), so no player id can
-// make two ladders share a word. Brute force is bounded by the per-level dig
-// limit and the per-player candle allowance, both enforced server-side.
+// The word is DERIVED and never stored. It is an HMAC of (serverKey, sessionId,
+// levelId, daySeed) mapped to a pronounceable nonsense word. Verification
+// recomputes it, so there is nothing to steal from the client and no word list in
+// any database. Deriving and checking it send nothing to the browser. Two
+// responses do carry the word, both on purpose: a guard reply the player talked
+// it out of (the game itself; a resume shows that reply again), and the reveal
+// after a correct claim (reveal.js), which shows the word and the guard prompt
+// that held it to a player who has just typed it. (Stored copies: those earned
+// replies, in the open attempt and the attempt log, and the winning claim in the
+// log.) Every ladder but the 35 derives under its own key (ladder.js wordKey), so
+// no player id can make two ladders share a word. Brute force is bounded by the
+// per-level dig limit and the per-player candle allowance, both enforced
+// server-side.
 
 const CONS = "bcdfghjklmnprstvz".split("");
 const VOWELS = "aeiou".split("");

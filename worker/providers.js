@@ -88,9 +88,12 @@ function callMock({ level, secret, playerMessage }) {
 async function callWorkersAI(env, { system, messages }) {
   if (!env.AI) throw new Error("Workers AI binding (env.AI) is not configured");
   const model = env.WORKERS_AI_MODEL || MODELS["workers-ai"];
-  const out = await withTimeout(env.AI.run(model, {
+  // The binding takes an AbortSignal (AiOptions.signal), so a timeout cancels the
+  // call itself, as fetch does for the other providers. The turn fails only once
+  // the call has stopped, so the refund and the player's lock wait for it.
+  const out = await env.AI.run(model, {
     messages: [{ role: "system", content: system }, ...messages], max_tokens: 600, temperature: 0,
-  }), model);
+  }, { signal: timeoutSignal() });
   // Llama-family models answer in `response`; newer catalog models (glm, gemma,
   // kimi) answer in the chat-completions shape.
   const text = out && (out.response || out.result || out.choices?.[0]?.message?.content);
@@ -157,14 +160,10 @@ function nonEmpty(text, model, finish) {
 }
 
 // How long one guard call may take. A turn holds the player's lock (lock.js) while
-// it waits, so a stalled provider must not hold it for minutes.
+// it waits, so a stalled provider must not hold it for minutes. Every call takes
+// this signal and is cancelled when it fires, never abandoned while still running.
 const PROVIDER_TIMEOUT_MS = 25000;
 const timeoutSignal = () => AbortSignal.timeout(PROVIDER_TIMEOUT_MS);
-function withTimeout(promise, label) {
-  let t;
-  const timer = new Promise((_, reject) => { t = setTimeout(() => reject(new Error(`${label} timed out after ${PROVIDER_TIMEOUT_MS} ms`)), PROVIDER_TIMEOUT_MS); });
-  return Promise.race([promise, timer]).finally(() => clearTimeout(t));
-}
 
 async function callGoogle(env, { system, messages }) {
   const key = env.GOOGLE_API_KEY;
@@ -198,11 +197,12 @@ async function callGoogle(env, { system, messages }) {
 }
 
 async function callOllama(env, { system, messages }) {
+  const model = env.OLLAMA_MODEL || MODELS.ollama;
   const r = await fetch((env.OLLAMA_URL || "http://127.0.0.1:11434") + "/api/chat", {
     method: "POST", signal: timeoutSignal(), headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: env.OLLAMA_MODEL || MODELS.ollama, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
+    body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...messages], stream: false, options: { temperature: 0, num_predict: 200 } }),
   });
   if (!r.ok) throw providerError(`ollama HTTP ${r.status}: ${await r.text()}`, r.status);
   const j = await r.json();
-  return j.message?.content || "";
+  return nonEmpty(j.message?.content || "", model, j.done_reason);
 }

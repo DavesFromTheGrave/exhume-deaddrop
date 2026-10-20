@@ -5,7 +5,8 @@
 //   POST /api/start  {levelId, restart}     begin or resume an attempt; returns counters + transcript
 //   POST /api/turn   {levelId, message}     (history is kept server-side; any sent is ignored)
 //   POST /api/hint   {levelId}              one vague hint, costs one exchange
-//   POST /api/claim  {levelId, claim}       the reveal on a win
+//   POST /api/claim  {levelId, claim, claimId}  the reveal on a win; the same claimId
+//                                           again gets the same answer, counted once
 //   GET  /api/state                         candle allowance (legacy)
 //
 // Identity: the Node server (server.mjs) issues a signed cookie and passes the id
@@ -29,7 +30,7 @@ import { buildReveal } from "./reveal.js";
 import { serial } from "./lock.js";
 import {
   loadPlayer, canEnter, levelView, startAttempt, openAttempt, noteExchange, noteGuess,
-  useHint, doors, adaptiveRules, summary, historyFor,
+  useHint, doors, adaptiveRules, summary, historyFor, priorClaim,
 } from "./progress.js";
 
 const json = (obj, status = 200) =>
@@ -238,6 +239,24 @@ async function handleClaim(env, body, id) {
   const level = lad.getLevel(body.levelId);
   if (!level) return json({ error: "no such level" }, 404);
   const { rec, open } = await openAttempt(env, pid, level);
+
+  // The same guess sent again (same claimId) after its response was lost gets the
+  // answer it already had, and nothing is counted twice. A win sends its reveal
+  // again, even if a new attempt has been opened since.
+  const claimId = body.claimId ? String(body.claimId).slice(0, 64) : "";
+  const prior = priorClaim(rec, level, claimId, body.claim || "");
+  if (prior && prior.win) {
+    const secret = await deriveSecret(wordKey(serverKey(env), lad), pid, level.id, prior.seed);
+    return json({
+      win: true,
+      reveal: buildReveal(level, secret, prior.winningMessage, lad.META.theme),
+      progress: levelView(rec, level, admin),
+      cleared: rec.cleared,
+      doors: doors(env, rec, admin),
+    });
+  }
+  if (prior) return json({ win: false, attemptFailed: prior.attemptFailed, progress: levelView(rec, level, admin) });
+
   if (!open) return json({ error: "Enter the level first.", code: "NO_ATTEMPT" }, 409);
   if (open.guesses >= level.digs) return json({ error: "No guesses left on this attempt.", code: "NO_GUESSES", progress: levelView(rec, level, admin) }, 409);
 
@@ -253,7 +272,7 @@ async function handleClaim(env, body, id) {
     message: `CLAIM: ${body.claim || ""}`,
   });
 
-  const r = await noteGuess(env, pid, level, { win, tags, admin, claim: body.claim || "" });
+  const r = await noteGuess(env, pid, level, { win, tags, admin, claim: body.claim || "", claimId, winningMessage });
   if (!win) {
     return json({ win: false, attemptFailed: r.attemptFailed, progress: r.view });
   }

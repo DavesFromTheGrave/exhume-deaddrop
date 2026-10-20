@@ -19,7 +19,9 @@ GitHub does not exist for it. Push both repos before starting one.
 - **`public/` client** reads its copy from `META.theme` via `/api/levels`, and
   its counters, transcript, locks and hints from the server.
 - **Selftest** covers both ladders end to end through the router, plus the word
-  staying server-side. `npm test` runs it and the message-limit tests.
+  staying server-side. `npm test` runs it, the message-limit tests, the provider
+  tests (`worker/providers.test.mjs`) and the progress tests
+  (`worker/progress.test.mjs`).
 - **Provider**: `PROVIDER = "groq"`, `GROQ_MODEL = "openai/gpt-oss-20b"` in
   `wrangler.toml`. The old handoff's picks are gone: Groq retired
   `llama-3.1-8b-instant` for free accounts on 2026-08-16, and Workers AI retired
@@ -87,6 +89,41 @@ A second review of those fixes (16 confirmed) then changed:
   restart; network errors say the request may or may not have landed and offer
   a re-enter; a refused turn keeps its bubble if a draft was typed.
 
+Copilot's review of the merged PR #1 then changed:
+
+- A timed-out Workers AI call is cancelled through the binding's AbortSignal, as
+  fetch already cancelled the other providers. The old `Promise.race` gave up at
+  25 s while the call kept running, so the candle was refunded and the player's
+  lock released under a live call. `worker/providers.test.mjs` checks the timeout
+  for every real provider on a hand-fired clock, through the router.
+- An empty Ollama reply is an empty completion like the other providers' (the
+  exchange is kept, the call counts toward the caps); it used to be a 200 with a
+  blank answer that spent the exchange and was stored as a turn.
+- The provider tests also cover both Workers AI reply shapes (Llama `response`,
+  chat-completions `choices`) with the empty and finish-reason path, and the
+  Gemini request body for each model family (2.5 Flash, 3, 2.5 Pro, other).
+- Each stored message and reply is cut at 20,000 characters. Levels 1-4 take
+  messages of any length, and the transcript only drops older turns, so one
+  oversized turn was kept whole in the player record (a provider with a large
+  context, or the mock, answers it). Nothing over 14,000 characters is ever
+  replayed, so the guard is sent the same; the attempt log keeps the whole text.
+- A guess whose response was lost can be sent again safely. The client sends a
+  `claimId` with each guess and reuses it for that guess (the new "Send the guess
+  again" offer, or the same guess from the box). The server answers a repeated
+  `claimId` as it did the first time, from the miss in the open attempt or from
+  the level's `lastClaim` (the guess that closed the attempt), so nothing counts
+  twice and a win sends its reveal again, even after a re-enter opened a new
+  attempt. Before, the resend got "Enter the level first." and the offered
+  re-enter opened a new attempt, so the reveal was lost.
+- Docs: `secret.js` and the README say where the word does reach the browser (an
+  earned reply, the reveal); the README says which failed calls are refunded,
+  that an empty completion keeps its candle and counts, and that a cancelled call
+  may still have used some quota.
+- No change for the log fallback finding: the legacy insert's columns are the
+  current ones minus `ladder`, so it can only succeed when `ladder` is the
+  missing column (checked against SQLite for four schemas); any other missing
+  column fails both inserts and is logged.
+
 ## Not done: pick up here
 
 1. **Flip to the 15**: set `LADDER = "15"` (wrangler.toml and the cPanel app's
@@ -95,7 +132,10 @@ A second review of those fixes (16 confirmed) then changed:
    `WORLD_NAMES` (maps worlds by index, so The Village would display as a crypt
    name), the seal geometry, and the stage thresholds at 15 and 25. It needs to
    read `total`, `theme` and world names from `/api/levels`. The GitHub copy of
-   that repo is older than Dave's local one, so push it first.
+   that repo is older than Dave's local one, so push it first. It should also
+   send a `claimId` with each guess and reuse it when it re-sends one (see
+   `sendClaim` in `public/app.js`); until then its players keep the old behaviour
+   when a claim response is lost.
 3. **Node host**: confirm `server.mjs` passes `env.STORE` (it should, per
    `store.js`). If it does not, add `TRUST_IDENTITY_HEADERS: "1"` to its env, or
    cookie identity stops being honoured.

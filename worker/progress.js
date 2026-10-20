@@ -18,9 +18,10 @@
 //   - the conversation lives here, in the open attempt, not in the browser: the
 //     client cannot add, edit or forge turns, and only turns that passed the input
 //     filters are replayed to the guard. Each exchange is kept as the player saw it
-//     (a blocked message, a withheld reply, or an answer), so a resume shows the
-//     same chat. A reply the player earned can hold the word; it is stored only
-//     while the attempt is open and dropped when the attempt closes.
+//     (a blocked message, a withheld reply, or an answer; at most 20,000 characters
+//     of each message and reply), so a resume shows the same chat. A reply the
+//     player earned can hold the word; it is stored only while the attempt is open
+//     and dropped when the attempt closes.
 
 import { getStore } from "./store.js";
 import { daySeed } from "./secret.js";
@@ -29,6 +30,12 @@ import { ladderFor, ladderId, DEFAULT_LADDER } from "./ladder.js";
 const HINTS_PER_ATTEMPT = 2;
 const WINS_REMEMBERED = 8;
 const TRANSCRIPT_MAX_CHARS = 60000;   // what a resume can show; oldest turns drop first
+// The most kept of one message or reply. Levels 1-4 take messages of any length,
+// and one oversized turn would otherwise be kept whole. estimateTokens counts at
+// least a token per 3.5 characters, so nothing over 14,000 characters is ever
+// replayed to the guard, and no provider's reply budget comes near this; the cut
+// trims only text nothing reads back, and one turn always fits the transcript.
+const TURN_FIELD_MAX_CHARS = 20000;
 // What is replayed to the guard. Groq's free tier caps one request at about 8,000
 // tokens including the reply budget; ~4,000 estimated tokens of history leaves
 // room for the guard prompt, the message and the reply. A request that is still
@@ -170,8 +177,8 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
   s.open.msgs += 1;
   if (turn) {
     const turns = s.open.turns || (s.open.turns = []);
-    const t = { user: String(turn.user) };
-    if (turn.assistant != null) t.assistant = String(turn.assistant);
+    const t = { user: String(turn.user).slice(0, TURN_FIELD_MAX_CHARS) };
+    if (turn.assistant != null) t.assistant = String(turn.assistant).slice(0, TURN_FIELD_MAX_CHARS);
     if (turn.filtered) t.filtered = turn.filtered;
     if (turn.blocked) t.blocked = turn.blocked;
     turns.push(t);
@@ -184,11 +191,14 @@ export async function noteExchange(env, pid, level, admin, turn = null) {
 }
 
 // One guess spent. On a win the level is cleared and the attempt closes; on the
-// last miss the attempt fails and may lock the level.
-export async function noteGuess(env, pid, level, { win, tags = [], admin = false, claim = "" }) {
+// last miss the attempt fails and may lock the level. A guess sent with a claimId
+// keeps it (on its miss, or as lastClaim when it closed the attempt), so the same
+// guess sent again after a lost response is answered by priorClaim, not counted.
+export async function noteGuess(env, pid, level, { win, tags = [], admin = false, claim = "", claimId = "", winningMessage = "" }) {
   const rec = await loadPlayer(env, pid);
   const s = slot(rec, level);
   if (!s.open) return null;
+  const guess = String(claim).slice(0, 200), seed = s.open.seed;
   let attemptFailed = false;
   if (win) {
     if (!hasCleared(rec, level.id)) rec.cleared.push(level.id);
@@ -199,11 +209,28 @@ export async function noteGuess(env, pid, level, { win, tags = [], admin = false
   } else {
     s.open.guesses += 1;
     // a missed guess is part of what the player saw; shown again on resume
-    (s.open.turns || (s.open.turns = [])).push({ miss: String(claim).slice(0, 200) });
+    (s.open.turns || (s.open.turns = [])).push(claimId ? { miss: guess, id: claimId } : { miss: guess });
     if (s.open.guesses >= level.digs) { failAttempt(env, s, level, admin); attemptFailed = true; }
+  }
+  // The guess that closed the attempt outlives it. A win keeps what its reveal
+  // needs: the seed (the word is derived again from it, never stored) and the move.
+  if (claimId && !s.open) {
+    s.lastClaim = win ? { id: claimId, claim: guess, win: true, seed, winningMessage } : { id: claimId, claim: guess, win: false, attemptFailed };
   }
   await savePlayer(env, pid, rec);
   return { view: levelView(rec, level, admin), attemptFailed, rec };
+}
+
+// The answer a guess already had, when the client sends it again with the same
+// claimId because the response was lost: a miss in the open attempt, or the guess
+// that closed the last attempt. null for a guess the server has not counted.
+export function priorClaim(rec, level, claimId, claim) {
+  if (!claimId) return null;
+  const s = slot(rec, level);
+  const guess = String(claim).slice(0, 200);
+  if (s.lastClaim && s.lastClaim.id === claimId && s.lastClaim.claim === guess) return s.lastClaim;
+  const missed = s.open && (s.open.turns || []).some((t) => t.id === claimId && t.miss === guess);
+  return missed ? { win: false, attemptFailed: false } : null;
 }
 
 // A hint costs one exchange. Returns {hint, view} or {error}.
