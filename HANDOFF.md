@@ -115,6 +115,14 @@ Copilot's review of the merged PR #1 then changed:
   twice and a win sends its reveal again, even after a re-enter opened a new
   attempt. Before, the resend got "Enter the level first." and the offered
   re-enter opened a new attempt, so the reveal was lost.
+- Docs: `secret.js` and the README say where the word does reach the browser (an
+  earned reply, the reveal); the README says which failed calls are refunded,
+  that an empty completion keeps its candle and counts, and that a cancelled call
+  may still have used some quota.
+- No change for the log fallback finding: the legacy insert's columns are the
+  current ones minus `ladder`, so it can only succeed when `ladder` is the
+  missing column (checked against SQLite for four schemas); any other missing
+  column fails both inserts and is logged.
 
 ## Not done: pick up here
 
