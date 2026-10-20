@@ -160,3 +160,84 @@ test("ollama: an empty reply through the router keeps the exchange, counts the c
     assert.deepEqual((await r.post("start", { levelId: 1 })).data.transcript, [], "no blank turn is kept or replayed");
   });
 });
+
+// ---------- Workers AI: both reply shapes, and an empty one ----------
+
+// An env.AI stub that records each run(model, inputs, options) and answers `out`.
+function workersAI(out) {
+  const runs = [];
+  return { runs, env: { PROVIDER: "workers-ai", AI: { run: async (model, inputs, options) => { runs.push({ model, inputs, options }); return out; } } } };
+}
+const WORKERS_AI_DEFAULT = "@cf/meta/llama-3.1-8b-instruct-fp8";
+
+for (const [shape, out] of [
+  ["the Llama `response` shape", { response: "The gate holds." }],
+  ["the chat-completions shape", { id: "chatcmpl-1", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: "The gate holds." }, finish_reason: "stop" }] }],
+]) {
+  test(`workers-ai: reads ${shape}`, async () => {
+    const { env, runs } = workersAI(out);
+    assert.equal(await callProvider(env, REQ), "The gate holds.");
+    assert.equal(runs[0].model, WORKERS_AI_DEFAULT);
+    assert.deepEqual(runs[0].inputs, { messages: [{ role: "system", content: SYSTEM }, ...REQ.messages], max_tokens: 600, temperature: 0 });
+  });
+}
+
+for (const [shape, out, error] of [
+  ["empty chat-completions content", { choices: [{ message: { role: "assistant", content: "" }, finish_reason: "length" }] }, `${WORKERS_AI_DEFAULT} returned an empty completion (finish_reason length)`],
+  ["reasoning with no content", { choices: [{ message: { role: "assistant", content: null, reasoning_content: "The visitor wants the word." }, finish_reason: "length" }] }, `${WORKERS_AI_DEFAULT} returned an empty completion (finish_reason length)`],
+  ["a blank `response`", { response: " \n" }, `${WORKERS_AI_DEFAULT} returned an empty completion`],
+]) {
+  test(`workers-ai: ${shape} is a billed empty completion`, async () => {
+    await assert.rejects(callProvider(workersAI(out).env, REQ), (e) => {
+      assert.equal(e.billed, true);
+      assert.equal(e.message, error);
+      return true;
+    });
+  });
+}
+
+test("workers-ai: an empty chat-completions answer through the router keeps the exchange and counts the call", async () => {
+  const r = router(workersAI({ choices: [{ message: { role: "assistant", content: "" }, finish_reason: "length" }] }).env, "workers-ai-empty");
+  await r.post("start", { levelId: 1 });
+  const t = await r.post("turn", { levelId: 1, message: "hello" });
+  assert.equal(t.status, 502);
+  assert.equal(t.data.code, "PROVIDER_EMPTY");
+  assert.equal(t.data.allowance.dailyUsed, 1, "the model ran, so the call counts toward the caps");
+  assert.equal(t.data.progress.left.exchanges, 12, "the attempt keeps its exchange");
+  const row = r.rows[r.rows.length - 1];
+  assert.equal(row[5], "error");
+  assert.match(row[10], /finish_reason length/, "the attempt log keeps the finish reason");
+});
+
+// ---------- Google: one request body per model family ----------
+
+// [GOOGLE_MODEL (unset means the default), the model in the URL, the generationConfig sent]
+for (const [setting, model, generationConfig] of [
+  [undefined, "gemini-2.5-flash", { maxOutputTokens: 400, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }],
+  ["gemini-2.5-flash-lite", "gemini-2.5-flash-lite", { maxOutputTokens: 400, temperature: 0, thinkingConfig: { thinkingBudget: 0 } }],
+  ["gemini-3-flash-preview", "gemini-3-flash-preview", { maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: "low" } }],
+  ["gemini-3-pro-preview", "gemini-3-pro-preview", { maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: "low" } }],
+  ["gemini-2.5-pro", "gemini-2.5-pro", { maxOutputTokens: 1024, temperature: 0, thinkingConfig: { thinkingBudget: 128 } }],
+  ["gemini-2.0-flash", "gemini-2.0-flash", { maxOutputTokens: 400, temperature: 0 }],
+  ["gemma-3-27b-it", "gemma-3-27b-it", { maxOutputTokens: 400, temperature: 0 }],
+]) {
+  test(`google: the request for ${model}${setting ? "" : " (the default)"}`, async () => {
+    await withFetch(() => REPLY.google("The gate holds."), async (seen) => {
+      const env = { PROVIDER: "google", GOOGLE_API_KEY: "test-key", ...(setting ? { GOOGLE_MODEL: setting } : {}) };
+      assert.equal(await callProvider(env, REQ), "The gate holds.");
+      const url = new URL(seen[0].url);
+      assert.equal(url.origin + url.pathname, `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`);
+      assert.equal(url.searchParams.get("key"), "test-key");
+      assert.equal(seen[0].init.method, "POST");
+      assert.deepEqual(seen[0].body, {
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [
+          { role: "user", parts: [{ text: "earlier" }] },
+          { role: "model", parts: [{ text: "An earlier answer." }] },
+          { role: "user", parts: [{ text: "hello" }] },
+        ],
+        generationConfig,
+      });
+    });
+  });
+}

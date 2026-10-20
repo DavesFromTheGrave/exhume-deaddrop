@@ -98,6 +98,9 @@ Copilot's review of the merged PR #1 then changed:
 - An empty Ollama reply is an empty completion like the other providers' (the
   exchange is kept, the call counts toward the caps); it used to be a 200 with a
   blank answer that spent the exchange and was stored as a turn.
+- The provider tests also cover both Workers AI reply shapes (Llama `response`,
+  chat-completions `choices`) with the empty and finish-reason path, and the
+  Gemini request body for each model family (2.5 Flash, 3, 2.5 Pro, other).
 
 ## Not done: pick up here
 
